@@ -4,13 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="theme.css">
-<title>Crée ton personnage</title>
+<title>Café Shot & Co Awards</title>
 <style>
   * { box-sizing: border-box; }
   .card {
     background: var(--card-bg); border-radius: 24px; padding: 28px 22px;
     max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(233,30,140,0.15);
     animation: fadeIn 0.4s ease; margin: 20px auto;
+  }
+  .card.dark-invite {
+    background: radial-gradient(circle at 50% 0%, #241B3A, #120D1F 70%);
+    border: 1px solid rgba(212,175,55,0.4);
+    padding: 34px 26px;
   }
   @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
   h2 { color: var(--primary-dark); margin-top: 0; }
@@ -59,6 +64,42 @@
     color: white; border-color: transparent;
     animation: chipWiggle 0.4s ease;
   }
+
+  /* ---- Écran d'invitation (carton doré sur fond sombre) ---- */
+  @keyframes introFadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes goldShimmer {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .intro-line {
+    opacity: 0;
+    animation-name: introFadeUp;
+    animation-duration: 0.7s;
+    animation-timing-function: ease;
+    animation-fill-mode: forwards;
+  }
+  .invite-crest {
+    width: 70px; height: 70px; margin: 0 auto 18px; border-radius: 50%;
+    border: 2px solid #D4AF37; display: flex; align-items: center; justify-content: center;
+    font-size: 32px; box-shadow: 0 0 18px rgba(212,175,55,0.35);
+    animation-duration: 0.6s;
+  }
+  .invite-kicker {
+    font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #D4AF37;
+    text-align: center; margin-bottom: 10px; font-weight: 700;
+  }
+  .invite-title { text-align: center; color: #FBF6EC; font-size: 25px; margin: 4px 0 14px; }
+  .invite-divider { width: 60px; height: 1px; background: #D4AF37; margin: 14px auto; opacity: 0.6; }
+  .invite-sub { text-align: center; font-size: 15px; color: #E8DFF0; margin: 10px 0; }
+  .invite-houses { text-align: center; font-size: 13px; color: #B3A5C9; margin: 10px 0; line-height: 1.6; }
+  .invite-houses strong { color: #FFF6D9; }
+  button.invite-btn {
+    background: linear-gradient(90deg, #D4AF37, #FFE9A8, #D4AF37);
+    color: #1a1625; text-transform: uppercase; letter-spacing: 1px; font-size: 14px;
+  }
 </style>
 </head>
 <body>
@@ -92,7 +133,7 @@ const QUESTIONS = [
 
 // ---------- État du parcours, sauvegardé en localStorage pour pouvoir reprendre ----------
 let state = JSON.parse(localStorage.getItem('onboarding_state') || 'null') || {
-  step: 0,          // 0 = accueil, 1 = avatar, 2..N = questions, N+1 = récap
+  step: localStorage.getItem('seen_intro') ? 0 : -1,  // -1 = invitation, 0 = accueil, 1 = avatar, 2..N = questions, N+1 = récap
   playerId: null,
   accessCode: null,
   name: '',
@@ -157,6 +198,29 @@ async function apiUploadPhoto(file) {
 // ---------- Rendu de chaque écran ----------
 function render() {
   const card = document.getElementById('card');
+
+  // Bascule le style sombre uniquement sur l'écran d'invitation
+  card.classList.toggle('dark-invite', state.step === -1);
+
+  if (state.step === -1) {
+    card.innerHTML = `
+      <div class="invite-crest intro-line" style="animation-delay:0s;">🏆</div>
+      <p class="invite-kicker intro-line" style="animation-delay:0.2s;">Vous êtes cordialement attendus</p>
+      <h2 class="invite-title intro-line" style="animation-delay:0.5s;">Café Shot &amp; Co Awards</h2>
+      <p class="invite-sub intro-line" style="animation-delay:0.9s;">Ce samedi</p>
+      <div class="invite-divider intro-line" style="animation-delay:1.2s;"></div>
+      <p class="invite-houses intro-line" style="animation-delay:1.4s;">Trois maisons de production s'affrontent pour les trophées de la soirée :<br><strong>Pastis Pictures</strong> · <strong>Studios Curaçao</strong> · <strong>Metro-Goldwyn-Martini</strong></p>
+      <p class="invite-sub intro-line" style="animation-delay:1.8s; font-size:14px; color:#B3A5C9;">Inscris-toi dès maintenant pour rejoindre la fête !</p>
+      <button class="invite-btn intro-line" id="intro-next-btn" style="animation-delay:2.2s;">Je m'inscris</button>
+    `;
+    document.getElementById('intro-next-btn').onclick = () => {
+      localStorage.setItem('seen_intro', 'true');
+      state.step = 0;
+      saveState();
+      render();
+    };
+    return;
+  }
 
   if (state.step === 0) {
     card.innerHTML = `
