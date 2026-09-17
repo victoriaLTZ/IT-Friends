@@ -24,9 +24,9 @@ TARGET_QUESTION_KEYS = [
 ]
 
 TEAM_MEMBERSHIP = {
-    "charles": "Équipe Rouge", "clem": "Équipe Rouge", "eugé": "Équipe Rouge",
-    "ellis": "Équipe Bleue", "margaux": "Équipe Bleue", "laure": "Équipe Bleue",
-    "antoine": "Équipe Violette", "horti": "Équipe Violette", "sab": "Équipe Violette",
+    "charles": "Pastis Pictures", "clem": "Pastis Pictures", "eugé": "Pastis Pictures",
+    "ellis": "Studios Curaçao", "margaux": "Studios Curaçao", "laure": "Studios Curaçao",
+    "antoine": "Metro-Goldwyn-Martini", "horti": "Metro-Goldwyn-Martini", "sab": "Metro-Goldwyn-Martini",
 }
 
 # ---------------------------------------------------------------------------
