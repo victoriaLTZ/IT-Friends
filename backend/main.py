@@ -125,9 +125,19 @@ class StageCreate(SQLModel):
     hint: Optional[str] = None
     order: int
 
+# ---------------------------------------------------------------------------
+# Modèles - controle du jeu / pages
+# ---------------------------------------------------------------------------
 
 class CodeSubmit(SQLModel):
     code: str
+
+class GameState(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    phase: str = "locked"  # "locked" | "alert" | "playing"
+
+class PhaseUpdate(SQLModel):
+    phase: str
 
 # ---------------------------------------------------------------------------
 # Modèles - Trial
@@ -590,7 +600,36 @@ def delete_team(team_id: str):
         session.commit()
         return {"deleted": True, "id": team_id}
 
+# ---------------------------------------------------------------------------
+# Gestion des pages
+# ---------------------------------------------------------------------------
+def get_or_create_game_state(session: Session) -> GameState:
+    state = session.exec(select(GameState)).first()
+    if not state:
+        state = GameState(phase="locked")
+        session.add(state)
+        session.commit()
+        session.refresh(state)
+    return state
 
+@app.get("/api/game-state")
+def get_game_state():
+    with Session(engine) as session:
+        state = get_or_create_game_state(session)
+        return {"phase": state.phase}
+
+@app.post("/api/game-state")
+async def set_game_state(data: PhaseUpdate):
+    if data.phase not in ["locked", "alert", "playing"]:
+        raise HTTPException(status_code=400, detail="Phase invalide")
+    with Session(engine) as session:
+        state = get_or_create_game_state(session)
+        state.phase = data.phase
+        session.add(state)
+        session.commit()
+
+    await manager.broadcast({"event": "phase_changed", "phase": data.phase})
+    return {"phase": data.phase}
 
 # ---------------------------------------------------------------------------
 # Étapes du rallye

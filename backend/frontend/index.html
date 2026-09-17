@@ -4,10 +4,71 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="theme.css">
-  <title>Cafe Shot & Co</title>
+  <title>Café Shot & Co Awards</title>
+  <style>
+    body { max-width: 500px; margin: 0 auto; padding: 0 16px; }
+    h1 { text-align: center; font-size: 24px; }
+    h2 { text-align: center; color: var(--purple); }
+    #ws-status { text-align: center; font-size: 13px; color: var(--text-muted); }
+
+    #board-container svg { background: linear-gradient(180deg, #FFF0F8 0%, #E0F7FA 100%); border-radius: 16px; }
+    .stage-node { filter: drop-shadow(0 2px 4px rgba(233,30,140,0.25)); }
+    .team-token { transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    #scoreboard { max-width: 480px; margin: 16px auto 0; display: flex; flex-direction: column; gap: 8px; }
+    .scoreboard-row {
+      background: var(--card-bg); border-radius: 14px; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(233,30,140,0.08);
+    }
+    .scoreboard-team { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .scoreboard-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .scoreboard-position { font-size: 13px; color: var(--text-muted); }
+    .scoreboard-points { font-weight: 700; color: var(--primary-dark); }
+
+    /* ---- Écran verrouillé ---- */
+    .locked-card {
+      max-width: 420px; margin: 40px auto; text-align: center; background: var(--card-bg);
+      border-radius: 20px; padding: 40px 24px;
+    }
+    .locked-card .locked-icon { font-size: 48px; margin-bottom: 16px; }
+
+    /* ---- Écran d'alerte ---- */
+    @keyframes alertFadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes sirenPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.75; }
+    }
+    @keyframes borderFlash {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(220,38,38,0.6), 0 10px 30px rgba(0,0,0,0.4); }
+      50% { box-shadow: 0 0 0 3px rgba(220,38,38,0.15), 0 10px 30px rgba(0,0,0,0.4); }
+    }
+    @keyframes stripeMove { from { background-position: 0 0; } to { background-position: 40px 0; } }
+    .alert-wrap { max-width: 420px; margin: 20px auto; }
+    .alert-stripes {
+      height: 10px; border-radius: 10px 10px 0 0;
+      background: repeating-linear-gradient(45deg, #1a1a1a, #1a1a1a 10px, #D4232C 10px, #D4232C 20px);
+      animation: stripeMove 1.2s linear infinite;
+    }
+    .alert-card {
+      background: linear-gradient(180deg, #1c1417, #0d0a0b);
+      border-radius: 0 0 16px 16px; padding: 30px 24px; text-align: center;
+      animation: borderFlash 1.6s ease-in-out infinite;
+    }
+    .alert-siren { font-size: 40px; margin-bottom: 14px; display: inline-block; animation: sirenPulse 1s ease-in-out infinite; }
+    .alert-line { opacity: 0; animation: alertFadeUp 0.7s ease forwards; }
+    .alert-kicker { font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase; color: #D4232C; font-weight: 700; margin-bottom: 8px; }
+    .alert-title { font-size: 22px; color: #FBF6EC; margin: 6px 0 14px; font-weight: 700; line-height: 1.3; }
+    .alert-body { font-size: 15px; color: #D9CFCF; margin: 10px 0; line-height: 1.6; }
+    .alert-body strong { color: #FF8A80; }
+    .alert-footer { font-size: 13px; color: #9C8B8B; margin-top: 16px; font-style: italic; }
+  </style>
 </head>
 <body>
-  <h1>Big Game by Cafe Shot & Co</h1>
+  <h1>Café Shot & Co Awards</h1>
 
   <div style="text-align:center; margin-bottom:12px;">
     <a href="team.html" style="font-size:13px; color:var(--purple); text-decoration:underline;">→ Voir mon équipe</a>
@@ -18,251 +79,269 @@
   <div id="board-container"></div>
   <div id="scoreboard"></div>
 
-  <style>
-  #scoreboard {
-    max-width: 480px; margin: 16px auto 0; display: flex; flex-direction: column; gap: 8px;
-  }
-  .scoreboard-row {
-    background: var(--card-bg); border-radius: 14px; padding: 12px 16px;
-    display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 2px 8px rgba(233,30,140,0.08);
-  }
-  .scoreboard-team { display: flex; align-items: center; gap: 10px; font-weight: 700; }
-  .scoreboard-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-  .scoreboard-position { font-size: 13px; color: var(--text-muted); }
-  .scoreboard-points { font-weight: 700; color: var(--primary-dark); }
-  body { max-width: 500px; margin: 0 auto; padding: 0 16px; }
-  h1 { text-align: center; font-size: 24px; }
-  h2 { text-align: center; }
-  #board-container svg { background: linear-gradient(180deg, #FFF0F8 0%, #E0F7FA 100%); border-radius: 16px; }
-  .stage-node { filter: drop-shadow(0 2px 4px rgba(233,30,140,0.25)); }
-  .team-token { transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
-  h2 { color: var(--purple); }
-  form input[type=text] { padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--secondary); margin-right: 8px; }
-  form button, #player-form button {
-    background: linear-gradient(90deg, var(--primary), var(--purple));
-    color: white; border: none; padding: 11px 20px; border-radius: 999px;
-    font-weight: 700; cursor: pointer;
-  }
-  #players-list, ul { list-style: none; padding: 0; }
-  #players-list li {
-    background: var(--card-bg); border-radius: 12px; padding: 10px 16px; margin-bottom: 6px;
-    box-shadow: 0 2px 6px rgba(233,30,140,0.08);
-  }
-  #ws-status { text-align: center; font-size: 13px; color: var(--text-muted); }
-  </style>
-
 <script src="avatar.js"></script>
 
-  <script>
-    const API_URL = window.location.origin + '/api';
+<script>
+  const API_URL = window.location.origin + '/api';
+  let currentPhase = 'locked';
 
-    // ---------- Chiffres romains ----------
-    function toRoman(num) {
-      const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
-      let result = '';
-      for (const [value, symbol] of map) { while (num >= value) { result += symbol; num -= value; } }
-      return result;
-    }
+  // ---------- Chiffres romains ----------
+  function toRoman(num) {
+    const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+    let result = '';
+    for (const [value, symbol] of map) { while (num >= value) { result += symbol; num -= value; } }
+    return result;
+  }
 
-    // ---------- Données ----------
-    let stagesData = [];
-    let teamsData = [];
-    let stagePoints = [];
-    let playersData = [];
+  // ---------- Données ----------
+  let stagesData = [];
+  let teamsData = [];
+  let stagePoints = [];
+  let playersData = [];
 
-    async function loadStages() {
-      const res = await fetch(`${API_URL}/stages`);
-      stagesData = (await res.json()).sort((a,b) => a.order - b.order);
-    }
-    async function loadTeams() {
-      const res = await fetch(`${API_URL}/teams`);
-      teamsData = await res.json();
-    }
-    async function loadFullPlayers() {
+  async function loadStages() {
+    const res = await fetch(`${API_URL}/stages`);
+    stagesData = (await res.json()).sort((a,b) => a.order - b.order);
+  }
+  async function loadTeams() {
+    const res = await fetch(`${API_URL}/teams`);
+    teamsData = await res.json();
+  }
+  async function loadFullPlayers() {
     const res = await fetch(`${API_URL}/players`);
     playersData = await res.json();
+  }
+
+  function buildPathPoints(n) {
+    const pts = [];
+    const stepY = 110;
+    for (let i = 0; i < n; i++) {
+      const y = 90 + i * stepY;
+      const x = (i % 2 === 0) ? 100 : 300;
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  // ---------- Dessine le plateau STATIQUE (route + étapes) une seule fois ----------
+  function initBoard() {
+    const container = document.getElementById('board-container');
+    const n = stagesData.length;
+    if (n === 0) { container.innerHTML = '<p>Aucune étape configurée.</p>'; return; }
+
+    stagePoints = buildPathPoints(n);
+    const height = 90 + (n - 1) * 110 + 100;
+
+    let pathD = `M ${stagePoints[0].x} ${stagePoints[0].y}`;
+    for (let i = 1; i < stagePoints.length; i++) {
+      const prev = stagePoints[i-1], cur = stagePoints[i];
+      const midY = (prev.y + cur.y) / 2;
+      pathD += ` C ${prev.x} ${midY}, ${cur.x} ${midY}, ${cur.x} ${cur.y}`;
     }
 
-    function buildPathPoints(n) {
-      const pts = [];
-      const stepY = 110;
-      for (let i = 0; i < n; i++) {
-        const y = 90 + i * stepY;
-        const x = (i % 2 === 0) ? 100 : 300;
-        pts.push({ x, y });
-      }
-      return pts;
-    }
-
-    // ---------- Dessine le plateau STATIQUE (route + étapes) une seule fois ----------
-    function initBoard() {
-      const container = document.getElementById('board-container');
-      const n = stagesData.length;
-      if (n === 0) { container.innerHTML = '<p>Aucune étape configurée.</p>'; return; }
-
-      stagePoints = buildPathPoints(n);
-      const height = 90 + (n - 1) * 110 + 100;
-
-      let pathD = `M ${stagePoints[0].x} ${stagePoints[0].y}`;
-      for (let i = 1; i < stagePoints.length; i++) {
-        const prev = stagePoints[i-1], cur = stagePoints[i];
-        const midY = (prev.y + cur.y) / 2;
-        pathD += ` C ${prev.x} ${midY}, ${cur.x} ${midY}, ${cur.x} ${cur.y}`;
-      }
-
-      let nodes = '';
-      stagePoints.forEach((p, i) => {
-        nodes += `
-          <g class="stage-node">
-            <circle cx="${p.x}" cy="${p.y}" r="20" fill="url(#nodeGradient)" stroke="#E91E8C" stroke-width="2.5"/>
-            <text x="${p.x}" y="${p.y+6}" text-anchor="middle" font-size="15" fill="#B3126A" font-weight="700">${toRoman(i+1)}</text>
-          </g>
-        `;
-      });
-
-      const last = stagePoints[stagePoints.length - 1];
-
-      container.innerHTML = `
-        <svg id="board-svg" viewBox="0 0 400 ${height}" style="width:100%; max-width:420px; display:block; margin:auto;">
-          <defs>
-            <radialGradient id="nodeGradient" cx="35%" cy="30%" r="70%">
-              <stop offset="0%" stop-color="#FFD6EC"/>
-              <stop offset="100%" stop-color="#B983FF"/>
-            </radialGradient>
-          </defs>
-          <path d="${pathD}" fill="none" stroke="#00BFA5" stroke-width="5" stroke-dasharray="1 14" stroke-linecap="round"/>
-          ${nodes}
-          <text x="${last.x}" y="${last.y - 32}" text-anchor="middle" font-size="20">🏁</text>
-          <g id="tokens-layer"></g>
-        </svg>
+    let nodes = '';
+    stagePoints.forEach((p, i) => {
+      nodes += `
+        <g class="stage-node">
+          <circle cx="${p.x}" cy="${p.y}" r="20" fill="url(#nodeGradient)" stroke="#E91E8C" stroke-width="2.5"/>
+          <text x="${p.x}" y="${p.y+6}" text-anchor="middle" font-size="15" fill="#B3126A" font-weight="700">${toRoman(i+1)}</text>
+        </g>
       `;
-    }
+    });
 
-    // ---------- Crée ou met à jour uniquement les JETONS (animation fluide) ----------
-    function renderTokens() {
-      const layer = document.getElementById('tokens-layer');
-      if (!layer) return;
-      const n = stagePoints.length;
+    const last = stagePoints[stagePoints.length - 1];
 
-      const byStage = {};
-      teamsData.forEach(t => {
-        const idx = Math.min(Math.max(t.stage_index, 0), n - 1);
-        byStage[idx] = byStage[idx] || [];
-        byStage[idx].push(t);
-      });
+    container.innerHTML = `
+      <svg id="board-svg" viewBox="0 0 400 ${height}" style="width:100%; max-width:420px; display:block; margin:auto;">
+        <defs>
+          <radialGradient id="nodeGradient" cx="35%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#FFD6EC"/>
+            <stop offset="100%" stop-color="#B983FF"/>
+          </radialGradient>
+        </defs>
+        <path d="${pathD}" fill="none" stroke="#00BFA5" stroke-width="5" stroke-dasharray="1 14" stroke-linecap="round"/>
+        ${nodes}
+        <text x="${last.x}" y="${last.y - 32}" text-anchor="middle" font-size="20">🏁</text>
+        <g id="tokens-layer"></g>
+      </svg>
+    `;
+  }
 
-      teamsData.forEach(team => {
-        const idx = Math.min(Math.max(team.stage_index, 0), n - 1);
-        const group = byStage[idx];
-        const gi = group.findIndex(t => t.id === team.id);
-        const angle = (gi / Math.max(group.length, 1)) * Math.PI * 2;
-        const r = group.length > 1 ? 45 : 0;
-        const p = stagePoints[idx];
-        const tx = p.x + Math.cos(angle) * r;
-        const ty = p.y - 65 + Math.sin(angle) * 10;
+  // ---------- Crée ou met à jour uniquement les JETONS (animation fluide) ----------
+  function renderTokens() {
+    const layer = document.getElementById('tokens-layer');
+    if (!layer) return;
+    const n = stagePoints.length;
 
-        const members = playersData.filter(pl => pl.team_id === team.id).slice(0, 4);
+    const byStage = {};
+    teamsData.forEach(t => {
+      const idx = Math.min(Math.max(t.stage_index, 0), n - 1);
+      byStage[idx] = byStage[idx] || [];
+      byStage[idx].push(t);
+    });
 
-        let g = document.getElementById(`token-${team.id}`);
-        if (!g) {
-          g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          g.setAttribute('id', `token-${team.id}`);
-          g.setAttribute('class', 'team-token');
-          layer.appendChild(g);
-        }
+    teamsData.forEach(team => {
+      const idx = Math.min(Math.max(team.stage_index, 0), n - 1);
+      const group = byStage[idx];
+      const gi = group.findIndex(t => t.id === team.id);
+      const angle = (gi / Math.max(group.length, 1)) * Math.PI * 2;
+      const r = group.length > 1 ? 45 : 0;
+      const p = stagePoints[idx];
+      const tx = p.x + Math.cos(angle) * r;
+      const ty = p.y - 65 + Math.sin(angle) * 10;
 
-        const spacing = 32;
-        const startX = -((members.length - 1) * spacing) / 2;
-        const avatarsHtml = members.map((pl, mi) => {
-          const cfg = pl.avatar_config ? JSON.parse(pl.avatar_config) : DEFAULT_AVATAR;
-          const mx = startX + mi * spacing;
-          const clipId = `clip-${pl.id}`;
-          return `
-            <g transform="translate(${mx},0)">
-              <clipPath id="${clipId}"><circle cx="0" cy="0" r="20"/></clipPath>
-              <circle r="21" fill="white" stroke="${team.color || '#E91E8C'}" stroke-width="3"/>
-              <g clip-path="url(#${clipId})">
-                <g transform="scale(0.2) translate(-110,-110)">
-                  ${buildAvatarInner(cfg)}
-                </g>
+      const members = playersData.filter(pl => pl.team_id === team.id).slice(0, 4);
+
+      let g = document.getElementById(`token-${team.id}`);
+      if (!g) {
+        g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('id', `token-${team.id}`);
+        g.setAttribute('class', 'team-token');
+        layer.appendChild(g);
+      }
+
+      const spacing = 32;
+      const startX = -((members.length - 1) * spacing) / 2;
+      const avatarsHtml = members.map((pl, mi) => {
+        const cfg = pl.avatar_config ? JSON.parse(pl.avatar_config) : DEFAULT_AVATAR;
+        const mx = startX + mi * spacing;
+        const clipId = `clip-${pl.id}`;
+        return `
+          <g transform="translate(${mx},0)">
+            <clipPath id="${clipId}"><circle cx="0" cy="0" r="20"/></clipPath>
+            <circle r="21" fill="white" stroke="${team.color || '#E91E8C'}" stroke-width="3"/>
+            <g clip-path="url(#${clipId})">
+              <g transform="scale(0.2) translate(-110,-110)">
+                ${buildAvatarInner(cfg)}
               </g>
             </g>
-          `;
-        }).join('');
-
-        g.innerHTML = `
-          ${avatarsHtml}
-          <text y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#B3126A">${team.name}</text>
+          </g>
         `;
+      }).join('');
 
-        g.style.transform = `translate(${tx}px, ${ty}px)`;
-      });
-    }
+      g.innerHTML = `
+        ${avatarsHtml}
+        <text y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#B3126A">${team.name}</text>
+      `;
 
-    function renderScoreboard() {
-  const container = document.getElementById('scoreboard');
-  if (!container) return;
-  const n = stagesData.length;
+      g.style.transform = `translate(${tx}px, ${ty}px)`;
+    });
+  }
 
-  const sorted = [...teamsData].sort((a, b) => b.stage_index - a.stage_index || b.team_points - a.team_points);
+  function renderScoreboard() {
+    const container = document.getElementById('scoreboard');
+    if (!container) return;
+    const n = stagesData.length;
 
-  container.innerHTML = sorted.map(team => {
-    const finished = team.stage_index >= n;
-    const positionLabel = finished ? '🏁 Terminé' : `Étape ${team.stage_index + 1} / ${n}`;
-    return `
-      <div class="scoreboard-row">
-        <div class="scoreboard-team">
-          <div class="scoreboard-dot" style="background:${team.color || '#7A2048'}"></div>
-          ${team.name}
+    const sorted = [...teamsData].sort((a, b) => b.stage_index - a.stage_index || b.team_points - a.team_points);
+
+    container.innerHTML = sorted.map(team => {
+      const finished = team.stage_index >= n;
+      const positionLabel = finished ? '🏁 Terminé' : `Étape ${team.stage_index + 1} / ${n}`;
+      return `
+        <div class="scoreboard-row">
+          <div class="scoreboard-team">
+            <div class="scoreboard-dot" style="background:${team.color || '#7A2048'}"></div>
+            ${team.name}
+          </div>
+          <div class="scoreboard-position">${positionLabel}</div>
+          <div class="scoreboard-points">⭐ ${team.team_points}</div>
         </div>
-        <div class="scoreboard-position">${positionLabel}</div>
-        <div class="scoreboard-points">⭐ ${team.team_points}</div>
+      `;
+    }).join('');
+  }
+
+  // ---------- Écrans de phase (verrouillé / alerte / jeu) ----------
+  function renderLockedScreen() {
+    document.getElementById('board-container').innerHTML = `
+      <div class="locked-card">
+        <div class="locked-icon">🔒</div>
+        <h2 style="color:var(--primary-dark);">Patience...</h2>
+        <p style="color:var(--text-muted); font-size:14px;">Rendez-vous samedi pour les Café Shot &amp; Co Awards.</p>
       </div>
     `;
-  }).join('');
-}
-    // ---------- WebSocket ----------
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
-    ws.onopen = () => document.getElementById('ws-status').textContent = 'WebSocket : connecté ✅';
-    ws.onclose = () => document.getElementById('ws-status').textContent = 'WebSocket : déconnecté ❌';
-    ws.onerror = () => document.getElementById('ws-status').textContent = 'WebSocket : erreur de connexion';
+    document.getElementById('scoreboard').innerHTML = '';
+  }
 
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.event === 'team_advanced') {
-        const team = teamsData.find(t => t.id === message.team_id);
-        if (team) {
-          team.stage_index = message.stage_index;
-          team.team_points = message.team_points;
-          renderTokens();
-          renderScoreboard();
-        }
-      }
-      if (message.event === 'trial_ended') {
-        const container = document.getElementById('board-container');
-        const winner = message.results.results[0];
-        container.innerHTML = `
-          <div style="text-align:center; padding:30px; background:var(--card-bg); border-radius:16px;">
-            <h2 style="color:var(--primary-dark);">⚖️ Verdict rendu</h2>
-            <p style="font-size:20px; font-weight:700; margin:16px 0;">${winner.suspect_name}</p>
-            <p style="color:var(--text-muted);">${winner.vote_count} voix sur ${message.results.total_votes}</p>
-          </div>
-        `;
-      }
-    };
+  function renderAlertScreen() {
+    document.getElementById('board-container').innerHTML = `
+      <div class="alert-wrap">
+        <div class="alert-stripes"></div>
+        <div class="alert-card">
+          <div class="alert-siren alert-line" style="animation-delay:0s, 0s;">🚨</div>
+          <p class="alert-kicker alert-line" style="animation-delay:0.2s;">Alerte · Dernière minute</p>
+          <h3 class="alert-title alert-line" style="animation-delay:0.5s;">Les Café Shot &amp; Co Awards sont menacés</h3>
+          <p class="alert-body alert-line" style="animation-delay:0.9s;">Trois membres de vos maisons de production seraient impliqués dans une affaire pour le moins... <strong>louche</strong>.</p>
+          <p class="alert-body alert-line" style="animation-delay:1.3s;">Sans réponses avant ce soir, la cérémonie pourrait être <strong>purement et simplement annulée</strong>.</p>
+          <p class="alert-footer alert-line" style="animation-delay:1.7s;">À vous d'enquêter. Le temps presse.</p>
+        </div>
+      </div>
+    `;
+    document.getElementById('scoreboard').innerHTML = '';
+  }
 
-    // ---------- Chargement initial ----------
-    async function init() {
-      await loadFullPlayers();
-      await loadStages();
-      await loadTeams();
+  function applyPhase(phase) {
+    currentPhase = phase;
+    if (phase === 'locked') {
+      renderLockedScreen();
+    } else if (phase === 'alert') {
+      renderAlertScreen();
+    } else if (phase === 'playing') {
       initBoard();
       renderTokens();
       renderScoreboard();
     }
-    init();
-  </script>
+  }
+
+  // ---------- WebSocket ----------
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+  ws.onopen = () => document.getElementById('ws-status').textContent = 'WebSocket : connecté ✅';
+  ws.onclose = () => document.getElementById('ws-status').textContent = 'WebSocket : déconnecté ❌';
+  ws.onerror = () => document.getElementById('ws-status').textContent = 'WebSocket : erreur de connexion';
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+
+    if (message.event === 'phase_changed') {
+      applyPhase(message.phase);
+    }
+
+    if (message.event === 'team_advanced' && currentPhase === 'playing') {
+      const team = teamsData.find(t => t.id === message.team_id);
+      if (team) {
+        team.stage_index = message.stage_index;
+        team.team_points = message.team_points;
+        renderTokens();
+        renderScoreboard();
+      }
+    }
+
+    if (message.event === 'trial_ended') {
+      const container = document.getElementById('board-container');
+      const winner = message.results.results[0];
+      container.innerHTML = `
+        <div style="text-align:center; padding:30px; background:var(--card-bg); border-radius:16px;">
+          <h2 style="color:var(--primary-dark);">⚖️ Verdict rendu</h2>
+          <p style="font-size:20px; font-weight:700; margin:16px 0;">${winner.suspect_name}</p>
+          <p style="color:var(--text-muted);">${winner.vote_count} voix sur ${message.results.total_votes}</p>
+        </div>
+      `;
+      document.getElementById('scoreboard').innerHTML = '';
+    }
+  };
+
+  // ---------- Chargement initial ----------
+  async function init() {
+    await loadFullPlayers();
+    await loadStages();
+    await loadTeams();
+
+    const res = await fetch(`${API_URL}/game-state`);
+    const data = await res.json();
+    applyPhase(data.phase);
+  }
+  init();
+</script>
 </body>
 </html>
