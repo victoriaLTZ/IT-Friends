@@ -32,7 +32,9 @@ TEAM_MEMBERSHIP = {
 # ---------------------------------------------------------------------------
 # Connexion à la base de données
 # ---------------------------------------------------------------------------
-DATABASE_URL = "sqlite:///./rallye.db"
+import os as os_module
+DATA_DIR = "/data" if os_module.path.exists("/data") else "."
+DATABASE_URL = f"sqlite:///{DATA_DIR}/rallye.db"
 engine = create_engine(DATABASE_URL, echo=True)
 
 
@@ -214,7 +216,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
+UPLOAD_DIR = f"{DATA_DIR}/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ---------------------------------------------------------------------------
