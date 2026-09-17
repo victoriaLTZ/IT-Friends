@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="theme.css">
   <title>Cafe Shot & Co</title>
 </head>
@@ -13,6 +14,9 @@
   <div id="board-container"></div>
 
   <style>
+  body { max-width: 500px; margin: 0 auto; padding: 0 16px; }
+  h1 { text-align: center; font-size: 24px; }
+  h2 { text-align: center; }
   #board-container svg { background: linear-gradient(180deg, #FFF0F8 0%, #E0F7FA 100%); border-radius: 16px; }
   .stage-node { filter: drop-shadow(0 2px 4px rgba(233,30,140,0.25)); }
   .team-token { transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
