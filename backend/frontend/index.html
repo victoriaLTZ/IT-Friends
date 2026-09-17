@@ -12,8 +12,21 @@
   <h2>Plateau de jeux</h2>
   <p id="ws-status">WebSocket : connexion en cours...</p>
   <div id="board-container"></div>
+  <div id="scoreboard"></div>
 
   <style>
+  #scoreboard {
+    max-width: 480px; margin: 16px auto 0; display: flex; flex-direction: column; gap: 8px;
+  }
+  .scoreboard-row {
+    background: var(--card-bg); border-radius: 14px; padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(233,30,140,0.08);
+  }
+  .scoreboard-team { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .scoreboard-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .scoreboard-position { font-size: 13px; color: var(--text-muted); }
+  .scoreboard-points { font-weight: 700; color: var(--primary-dark); }
   body { max-width: 500px; margin: 0 auto; padding: 0 16px; }
   h1 { text-align: center; font-size: 24px; }
   h2 { text-align: center; }
@@ -182,6 +195,29 @@
         g.style.transform = `translate(${tx}px, ${ty}px)`;
       });
     }
+
+    function renderScoreboard() {
+  const container = document.getElementById('scoreboard');
+  if (!container) return;
+  const n = stagesData.length;
+
+  const sorted = [...teamsData].sort((a, b) => b.stage_index - a.stage_index || b.team_points - a.team_points);
+
+  container.innerHTML = sorted.map(team => {
+    const finished = team.stage_index >= n;
+    const positionLabel = finished ? '🏁 Terminé' : `Étape ${team.stage_index + 1} / ${n}`;
+    return `
+      <div class="scoreboard-row">
+        <div class="scoreboard-team">
+          <div class="scoreboard-dot" style="background:${team.color || '#7A2048'}"></div>
+          ${team.name}
+        </div>
+        <div class="scoreboard-position">${positionLabel}</div>
+        <div class="scoreboard-points">⭐ ${team.team_points}</div>
+      </div>
+    `;
+  }).join('');
+}
     // ---------- WebSocket ----------
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
@@ -197,6 +233,7 @@
           team.stage_index = message.stage_index;
           team.team_points = message.team_points;
           renderTokens();
+          renderScoreboard();
         }
       }
       if (message.event === 'trial_ended') {
@@ -219,6 +256,7 @@
       await loadTeams();
       initBoard();
       renderTokens();
+      renderScoreboard();
     }
     init();
   </script>
