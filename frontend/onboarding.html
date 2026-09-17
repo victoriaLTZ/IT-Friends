@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="theme.css">
+<title>Crée ton personnage</title>
+<style>
+  * { box-sizing: border-box; }
+  .card {
+    background: var(--card-bg); border-radius: 24px; padding: 28px 22px;
+    max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(233,30,140,0.15);
+    animation: fadeIn 0.4s ease; margin: 20px auto;
+  }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+  h2 { color: var(--primary-dark); margin-top: 0; }
+  p.progress { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+  input[type=text] {
+    width: 100%; padding: 12px; border-radius: 12px; border: 1.5px solid var(--secondary);
+    font-size: 16px; margin-bottom: 14px;
+  }
+  button {
+    background: linear-gradient(90deg, var(--primary), var(--purple));
+    color: white; border: none; border-radius: 999px;
+    padding: 13px 20px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .photo-preview { width: 100%; border-radius: 12px; margin-bottom: 12px; display: none; }
+  .recap-item { font-size: 14px; margin-bottom: 8px; }
+  .recap-item strong { color: var(--secondary); }
+  #status-msg { font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 10px; }
+  .swatch-row, .option-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+  .swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+  .swatch.selected { border-color: var(--purple); }
+  .opt-btn { padding: 7px 12px; border-radius: 999px; border: 1.5px solid var(--secondary); background: white; color: var(--text-dark); font-size: 13px; cursor: pointer; }
+  .opt-btn.selected { background: var(--primary); color: white; border-color: var(--primary); }
+
+  @keyframes chipPop {
+  0% { opacity: 0; transform: scale(0.5) translateY(10px); }
+  60% { opacity: 1; transform: scale(1.08) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  @keyframes chipWiggle {
+    0%, 100% { transform: rotate(0deg) scale(1.05); }
+    25% { transform: rotate(-4deg) scale(1.05); }
+    75% { transform: rotate(4deg) scale(1.05); }
+  }
+  .name-grid {
+    display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 20px 0;
+  }
+  .name-chip {
+    padding: 12px 20px; border-radius: 999px; border: 2px solid var(--secondary);
+    background: white; font-size: 15px; font-weight: 600; color: var(--text-dark);
+    cursor: pointer; opacity: 0; animation: chipPop 0.5s ease forwards;
+  }
+  .name-chip.selected {
+    background: linear-gradient(90deg, var(--primary), var(--purple));
+    color: white; border-color: transparent;
+    animation: chipWiggle 0.4s ease;
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card"></div>
+
+<script src="avatar.js"></script>
+
+<script>
+const API_URL = window.location.origin + '/api';
+
+const ROSTER = ["Horti", "Clem", "Laure", "Margaux", "Eugé", "Antoine", "Ellis", "Sab", "Charles", "Vic"];
+
+// ---------- Les questions du parcours (facile à modifier ici) ----------
+const QUESTIONS = [
+  { key: 'childhood_photo_url', label: 'Ajoute une photo d\'enfance (la tienne)', type: 'photo' },
+  { key: 'embarrassing_photo_url', label: 'Ajoute une photo libre (fun, sur toi, sur autrui, ce que tu veux...)', type: 'photo' },
+
+  { key: 'favorite_book', label: 'À ton avis, quel est le livre préféré de {target} ?', type: 'target_text' },
+  { key: 'favorite_quote', label: 'Selon toi, quelle est la phrase préférée de {target} ?', type: 'target_text' },
+  { key: 'favorite_drink', label: 'Quelle est la boisson/apéro préféré de {target} ?', type: 'target_text' },
+  { key: 'borrowed_object', label: 'Un objet que {target} aurait emprunté et jamais rendu ?', type: 'target_text' },
+  { key: 'phobia', label: 'La plus grande peur de {target} ?', type: 'target_text' },
+  { key: 'hidden_talent', label: 'Un talent caché de {target} ?', type: 'target_text' },
+  { key: 'fun_fact_about_other', label: 'Un fun fact sur {target} ?', type: 'target_text' },
+  { key: 'dream_trip', label: 'Une destination de voyage qui fait rêver {target} ?', type: 'target_text' },
+  { key: 'impulse_purchase', label: 'Un achat inutile de {target} qu\'il/elle ne regrette pas ?', type: 'target_text' },
+  { key: 'looping_song', label: 'Une chanson que {target} écoute en boucle ?', type: 'target_text' },
+  { key: 'old_style', label: 'un style vestimentaire incompris que {target} pourrait porter fièrement ?', type: 'target_text' },
+  { key: 'weird_sleep_spot', label: 'Un endroit où {target} a dormi et ne referait jamais ?', type: 'target_text' },
+];
+
+// ---------- État du parcours, sauvegardé en localStorage pour pouvoir reprendre ----------
+let state = JSON.parse(localStorage.getItem('onboarding_state') || 'null') || {
+  step: 0,          // 0 = accueil, 1 = avatar, 2..N = questions, N+1 = récap
+  playerId: null,
+  accessCode: null,
+  name: '',
+  avatar: {
+    skin: '#F5C4B3',
+    hairStyle: 'court',
+    hairColor: '#4A1B0C',
+    eyes: 'normal',
+    outfitColor: '#D85A30',
+    accessory: 'none',
+  },
+  answers: {},       // { question_key: value }
+};
+
+function saveState() {
+  localStorage.setItem('onboarding_state', JSON.stringify(state));
+}
+
+// ---------- Appels API ----------
+async function apiCreatePlayer(name) {
+  const res = await fetch(`${API_URL}/players`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Erreur lors de la création du personnage');
+  }
+  return data;
+}
+
+async function apiSaveAvatar(playerId, avatarConfig) {
+  await fetch(`${API_URL}/players/${playerId}/avatar`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatar_config: JSON.stringify(avatarConfig) }),
+  });
+}
+
+async function apiSaveAnswer(playerId, questionKey, value, aboutPlayerId, aboutPlayerName) {
+  await fetch(`${API_URL}/players/${playerId}/answers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question_key: questionKey,
+      value,
+      about_player_id: aboutPlayerId || null,
+      about_player_name: aboutPlayerName || null,
+    }),
+  });
+}
+
+async function apiUploadPhoto(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_URL}/upload`, { method: 'POST', body: formData });
+  const data = await res.json();
+  return window.location.origin + data.url;
+}
+
+// ---------- Rendu de chaque écran ----------
+function render() {
+  const card = document.getElementById('card');
+
+  if (state.step === 0) {
+    card.innerHTML = `
+      <h2>Big Game by Cafe shot & Co 🎲</h2>
+      <p class="progress">Étape 1 sur ${QUESTIONS.length + 2}</p>
+      <p style="text-align:center; font-size:14px; color:var(--text-muted); margin-bottom:4px;">Touche ton prénom</p>
+      <div class="name-grid" id="name-grid">
+        ${ROSTER.map((n, i) => `
+          <div class="name-chip ${n === state.name ? 'selected' : ''}" data-name="${n}" style="animation-delay:${i * 0.06}s">${n}</div>
+        `).join('')}
+      </div>
+      <button id="next-btn" ${state.name ? '' : 'disabled'}>Commencer</button>
+      <p id="status-msg"></p>
+    `;
+
+    document.querySelectorAll('.name-chip').forEach(chip => {
+      chip.onclick = () => {
+        state.name = chip.dataset.name;
+        document.querySelectorAll('.name-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        chip.classList.remove('selected');
+        void chip.offsetWidth;
+        chip.classList.add('selected');
+        document.getElementById('next-btn').disabled = false;
+      };
+    });
+
+    document.getElementById('next-btn').onclick = onNameSubmit;
+    return;
+  }
+
+  if (state.step === 1) {
+    const skins = ['#F5C4B3','#E8B88A','#C88857','#8B5A2B','#5C3A21'];
+    const hairColors = ['#4A1B0C','#26215C','#412402','#2C2C2A','#D4537E','#EF9F27'];
+    const outfitColors = ['#D85A30','#378ADD','#639922','#7F77DD','#D4537E','#EF9F27'];
+    const eyesOptions = [['normal','Normal'],['coeur','Cœur'],['fermes','Fermés'],['etonne','Étonné']];
+    const hairStyles = [['court','Court'],['long','Long'],['boule','Boule']];
+    const accessories = [['none','Aucun'],['lunettes','Lunettes'],['chapeau','Chapeau']];
+
+    card.innerHTML = `
+      <h2>Crée ton avatar</h2>
+      <p class="progress">Étape 2 sur ${QUESTIONS.length + 2}</p>
+      <svg id="avatar-preview" width="180" height="180" viewBox="0 0 220 220" style="display:block; margin: 0 auto 16px;">
+        ${buildAvatarInner(state.avatar)}
+      </svg>
+
+      <p style="font-size:13px; color:#8a8071; margin-bottom:6px;">Couleur de peau</p>
+      <div class="swatch-row" data-field="skin">
+        ${skins.map(c => `<div class="swatch ${c === state.avatar.skin ? 'selected' : ''}" style="background:${c}" data-value="${c}"></div>`).join('')}
+      </div>
+
+      <p style="font-size:13px; color:#8a8071; margin:12px 0 6px;">Coiffure</p>
+      <div class="option-row" data-field="hairStyle">
+        ${hairStyles.map(([k,l]) => `<button type="button" class="opt-btn ${k === state.avatar.hairStyle ? 'selected' : ''}" data-value="${k}">${l}</button>`).join('')}
+      </div>
+
+      <p style="font-size:13px; color:#8a8071; margin:12px 0 6px;">Couleur de cheveux</p>
+      <div class="swatch-row" data-field="hairColor">
+        ${hairColors.map(c => `<div class="swatch ${c === state.avatar.hairColor ? 'selected' : ''}" style="background:${c}" data-value="${c}"></div>`).join('')}
+      </div>
+
+      <p style="font-size:13px; color:#8a8071; margin:12px 0 6px;">Expression</p>
+      <div class="option-row" data-field="eyes">
+        ${eyesOptions.map(([k,l]) => `<button type="button" class="opt-btn ${k === state.avatar.eyes ? 'selected' : ''}" data-value="${k}">${l}</button>`).join('')}
+      </div>
+
+      <p style="font-size:13px; color:#8a8071; margin:12px 0 6px;">Couleur de tenue</p>
+      <div class="swatch-row" data-field="outfitColor">
+        ${outfitColors.map(c => `<div class="swatch ${c === state.avatar.outfitColor ? 'selected' : ''}" style="background:${c}" data-value="${c}"></div>`).join('')}
+      </div>
+
+      <p style="font-size:13px; color:#8a8071; margin:12px 0 6px;">Accessoire</p>
+      <div class="option-row" data-field="accessory">
+        ${accessories.map(([k,l]) => `<button type="button" class="opt-btn ${k === state.avatar.accessory ? 'selected' : ''}" data-value="${k}">${l}</button>`).join('')}
+      </div>
+
+      <button id="next-btn" style="margin-top:18px;">Continuer</button>
+      <p id="status-msg"></p>
+    `;
+
+    document.querySelectorAll('.swatch, .opt-btn').forEach(el => {
+      el.onclick = () => {
+        const field = el.parentElement.dataset.field;
+        state.avatar[field] = el.dataset.value;
+        saveState();
+        document.getElementById('avatar-preview').innerHTML = buildAvatarInner(state.avatar);
+        document.querySelectorAll(`[data-field="${field}"] .swatch, [data-field="${field}"] .opt-btn`).forEach(e => e.classList.remove('selected'));
+        el.classList.add('selected');
+      };
+    });
+
+    document.getElementById('next-btn').onclick = onAvatarSubmit;
+    return;
+  }
+
+  const questionIndex = state.step - 2;
+  if (questionIndex >= 0 && questionIndex < QUESTIONS.length) {
+    const q = QUESTIONS[questionIndex];
+
+    if (q.type === 'target_text') {
+      renderTargetQuestion(q);
+      return;
+    }
+
+    card.innerHTML = `
+      <h2>${q.label}</h2>
+      <p class="progress">Étape ${state.step + 1} sur ${QUESTIONS.length + 2}</p>
+      ${q.type === 'text' ? `
+        <input type="text" id="answer-input" placeholder="Ta réponse" value="${state.answers[q.key] || ''}">
+      ` : `
+        <img id="photo-preview" class="photo-preview" src="${state.answers[q.key] || ''}" style="${state.answers[q.key] ? 'display:block' : ''}">
+        <input type="file" id="photo-input" accept="image/*">
+      `}
+      <button id="next-btn">Suivant</button>
+      <p id="status-msg"></p>
+    `;
+    document.getElementById('next-btn').onclick = () => onAnswerSubmit(q);
+    if (q.type === 'photo') {
+      document.getElementById('photo-input').onchange = onPhotoSelected;
+    }
+    return;
+  }
+
+  // Écran récapitulatif final
+  card.innerHTML = `
+    <svg width="90" height="90" viewBox="0 0 220 220" style="display:block; margin: 0 auto 16px;">${buildAvatarInner(state.avatar)}</svg>
+    <h2 style="text-align:center;">${state.name}</h2>
+    ${QUESTIONS.filter(q => (q.type === 'text' || q.type === 'target_text') && state.answers[q.key]).map(q =>
+      `<div class="recap-item"><strong>${q.label.replace('{target}', state.answers[q.key + '__targetName'] || '')}</strong><br>${state.answers[q.key]}</div>`
+    ).join('')}
+    <p style="text-align:center; margin-top:16px; color:var(--secondary);">Ton personnage est prêt ! 🎉</p>
+    <p style="text-align:center; font-size:12px; color:#8a8071;">Ton code personnel (garde-le) : <strong>${state.accessCode}</strong></p>
+  `;
+}
+
+async function renderTargetQuestion(q) {
+  const card = document.getElementById('card');
+  let targetName = state.answers[q.key + '__targetName'];
+  let targetId = state.answers[q.key + '__targetId'];
+
+  if (!targetName) {
+    card.innerHTML = `<h2>Chargement...</h2>`;
+    const res = await fetch(`${API_URL}/players/${state.playerId}/target-for-question/${q.key}`);
+    if (!res.ok) {
+      card.innerHTML = `<h2>Erreur, réessaie plus tard</h2><p>Ton code : <strong>${state.accessCode}</strong></p>`;
+      return;
+    }
+    const data = await res.json();
+    targetName = data.target_name;
+    targetId = data.target_id;
+    state.answers[q.key + '__targetName'] = targetName;
+    state.answers[q.key + '__targetId'] = targetId;
+    saveState();
+  }
+
+  const label = q.label.replace('{target}', targetName);
+  card.innerHTML = `
+    <h2>${label}</h2>
+    <p class="progress">Étape ${state.step + 1} sur ${QUESTIONS.length + 2}</p>
+    <input type="text" id="answer-input" placeholder="La réponse" value="${state.answers[q.key] || ''}">
+    <button id="next-btn">Suivant</button>
+    <p id="status-msg"></p>
+  `;
+  document.getElementById('next-btn').onclick = () => onAnswerSubmit(q);
+}
+
+// ---------- Handlers ----------
+async function onNameSubmit() {
+  const name = state.name;
+  if (!name) return;
+  const statusMsg = document.getElementById('status-msg');
+  statusMsg.textContent = 'Création en cours...';
+
+  try {
+    const player = await apiCreatePlayer(name);
+    state.playerId = player.id;
+    state.accessCode = player.access_code;
+    state.name = name;
+    state.step = 1;
+    saveState();
+    render();
+  } catch (err) {
+    statusMsg.textContent = err.message;
+  }
+}
+
+async function onAvatarSubmit() {
+  await apiSaveAvatar(state.playerId, state.avatar);
+  state.step = 2;
+  saveState();
+  render();
+}
+
+async function onPhotoSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusMsg = document.getElementById('status-msg');
+  statusMsg.textContent = 'Envoi de la photo...';
+  const url = await apiUploadPhoto(file);
+
+  const questionIndex = state.step - 2;
+  const q = QUESTIONS[questionIndex];
+  state.answers[q.key] = url;
+  saveState();
+
+  document.getElementById('photo-preview').src = url;
+  document.getElementById('photo-preview').style.display = 'block';
+  statusMsg.textContent = 'Photo envoyée ✅';
+}
+
+async function onAnswerSubmit(q) {
+  let value;
+  if (q.type === 'photo') {
+    value = state.answers[q.key];
+  } else {
+    const input = document.getElementById('answer-input');
+    value = input ? input.value.trim() : state.answers[q.key];
+  }
+
+  if (!value) {
+    document.getElementById('status-msg').textContent = 'Réponds avant de continuer !';
+    return;
+  }
+
+  state.answers[q.key] = value;
+  const targetId = q.type === 'target_text' ? state.answers[q.key + '__targetId'] : null;
+  const targetName = q.type === 'target_text' ? state.answers[q.key + '__targetName'] : null;
+  await apiSaveAnswer(state.playerId, q.key, value, targetId, targetName);
+  state.step += 1;
+  saveState();
+  render();
+}
+
+// ---------- Démarrage ----------
+render();
+</script>
+</body>
+</html>

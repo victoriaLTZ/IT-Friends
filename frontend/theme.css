@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap');
+
+:root {
+  --bg-start: #FDE8F5;
+  --bg-end: #E0F7FA;
+  --primary: #E91E8C;
+  --primary-dark: #B3126A;
+  --secondary: #00BFA5;
+  --accent: #FFC107;
+  --purple: #7C4DFF;
+  --card-bg: #FFFFFF;
+  --text-dark: #2D1B3D;
+  --text-muted: #8A7B99;
+  --radius: 18px;
+}
+
+body {
+  background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+  font-family: 'Quicksand', system-ui, sans-serif;
+  color: var(--text-dark);
+}
+
+.big-title {
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+  background: linear-gradient(90deg, var(--primary), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin: 10px 0 4px;
+}
+
+.subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}

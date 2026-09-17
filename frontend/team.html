@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="theme.css">
+<title>Mon équipe — Big Game</title>
+<style>
+  * { box-sizing: border-box; }
+  .card {
+    background: var(--card-bg); border-radius: 24px; padding: 24px 20px;
+    max-width: 440px; width: 100%; box-shadow: 0 10px 30px rgba(233,30,140,0.15);
+    margin: 20px auto;
+  }
+  h2 { color: var(--primary-dark); margin-top: 0; }
+  h3 { color: var(--purple); font-size: 16px; margin-bottom: 8px; }
+  input[type=text] {
+    width: 100%; padding: 12px; border-radius: 12px; border: 1.5px solid var(--secondary);
+    font-size: 16px; margin-bottom: 14px; background: white;
+  }
+  button {
+    background: linear-gradient(90deg, var(--primary), var(--purple));
+    color: white; border: none; border-radius: 999px;
+    padding: 13px 20px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status-msg { font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 10px; }
+  .riddle-box {
+    background: linear-gradient(135deg, #FFF0F8, #E0F7FA);
+    border-radius: 16px; padding: 18px; margin-bottom: 16px; text-align: center;
+  }
+  .riddle-box p { font-style: italic; font-size: 16px; color: var(--text-dark); margin: 0; }
+  .clue-item { border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; font-size: 14px; }
+  .clue-item.charge { background: #FDEAEA; border-left: 4px solid #D94A4A; }
+  .clue-item.decharge { background: #E8F5EA; border-left: 4px solid #4A9D5C; }
+  .clue-item.neutre { background: #F0F0F0; border-left: 4px solid #999; }
+  .clue-item .target { font-weight: 700; color: var(--primary-dark); }
+  .points-badge {
+    display: inline-block; background: var(--accent); color: var(--text-dark);
+    padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; margin-bottom: 12px;
+  }
+  .logout-link { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 16px; cursor: pointer; text-decoration: underline; }
+  .bonus-banner { background: var(--primary); color: white; border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: center; }
+  .bonus-banner h3 { color: white; }
+</style>
+</head>
+<body>
+  <div class="card" id="card"></div>
+
+<script>
+const API_URL = window.location.origin + '/api';
+
+let session = JSON.parse(localStorage.getItem('team_session') || 'null');
+let bonusActive = null;
+
+function renderLogin() {
+  const card = document.getElementById('card');
+  card.innerHTML = `
+    <h2>🔐 Mon équipe</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Entre ton code personnel reçu à la création de ton personnage</p>
+    <input type="text" id="code-input" placeholder="Ton code (ex: F98069)">
+    <button id="login-btn">Entrer</button>
+    <p id="status-msg"></p>
+  `;
+  document.getElementById('login-btn').onclick = onLogin;
+}
+
+async function onLogin() {
+  const code = document.getElementById('code-input').value.trim();
+  const statusMsg = document.getElementById('status-msg');
+  if (!code) return;
+
+  statusMsg.textContent = 'Connexion...';
+  const res = await fetch(`${API_URL}/players/by-code/${code}`);
+  if (!res.ok) {
+    statusMsg.textContent = 'Code invalide';
+    return;
+  }
+  const data = await res.json();
+  const player = data.player;
+
+  if (!player.team_id) {
+    statusMsg.textContent = "Tu n'as pas encore d'équipe assignée, reviens plus tard !";
+    return;
+  }
+
+  session = { playerId: player.id, playerName: player.name, teamId: player.team_id };
+  localStorage.setItem('team_session', JSON.stringify(session));
+  renderDashboard();
+}
+
+function logout() {
+  session = null;
+  localStorage.removeItem('team_session');
+  renderLogin();
+}
+
+async function renderDashboard() {
+  const card = document.getElementById('card');
+  card.innerHTML = `<h2>Chargement...</h2>`;
+
+  const [stationRes, cluesRes, teamsRes] = await Promise.all([
+    fetch(`${API_URL}/teams/${session.teamId}/current-station`),
+    fetch(`${API_URL}/teams/${session.teamId}/clues`),
+    fetch(`${API_URL}/teams`),
+  ]);
+
+  const station = await stationRes.json();
+  const clues = await cluesRes.json();
+  const teams = await teamsRes.json();
+  const myTeam = teams.find(t => t.id === session.teamId);
+
+  let riddleHtml = '';
+  if (station.finished) {
+    riddleHtml = `<div class="riddle-box"><p>🏁 Vous avez terminé toutes les stations !</p></div>`;
+  } else {
+    riddleHtml = `
+      <div class="riddle-box"><p>${station.riddle}</p></div>
+      <input type="text" id="team-code-input" placeholder="Code trouvé sur place">
+      <button id="submit-code-btn">Valider</button>
+      <p id="code-feedback"></p>
+    `;
+  }
+
+  const cluesHtml = clues.length === 0
+    ? `<p style="font-size:13px; color:var(--text-muted);">Aucun indice récolté pour l'instant.</p>`
+    : clues.map(c => `
+        <div class="clue-item ${c.kind}">
+            ${c.image_url ? `<img src="${c.image_url}" style="width:100%; border-radius:8px; margin-bottom:8px;">` : ''}
+            <span class="target">${c.target_player}</span> — ${c.station}<br>
+            ${c.text}
+        </div>
+        `).join('');
+
+  card.innerHTML = `
+    <h2>${myTeam ? myTeam.name : 'Ton équipe'}</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-top:-10px;">Connecté(e) en tant que ${session.playerName}</p>
+    <div class="points-badge">⭐ ${myTeam ? myTeam.team_points : 0} points</div>
+
+    <div id="bonus-slot"></div>
+
+    <h3>Énigme en cours</h3>
+    ${riddleHtml}
+
+    <h3>Indices récoltés (${clues.length})</h3>
+    <div id="clues-list">${cluesHtml}</div>
+
+    <p class="logout-link" id="logout-link">Se déconnecter</p>
+  `;
+
+  if (!station.finished) {
+    document.getElementById('submit-code-btn').onclick = onSubmitCode;
+  }
+  document.getElementById('logout-link').onclick = logout;
+
+  renderBonusSlot();
+}
+
+function renderBonusSlot() {
+  const slot = document.getElementById('bonus-slot');
+  if (!slot) return;
+  if (bonusActive && bonusActive.active) {
+    slot.innerHTML = `
+      <div class="bonus-banner">
+        <h3>⚡ Question spéciale !</h3>
+        <p style="margin-bottom:12px;">${bonusActive.prompt}</p>
+        <button id="buzz-btn">BUZZ !</button>
+        <p id="buzz-feedback" style="font-size:13px; margin-top:8px;"></p>
+      </div>
+    `;
+    document.getElementById('buzz-btn').onclick = onBuzz;
+  } else {
+    slot.innerHTML = '';
+  }
+}
+
+async function onSubmitCode() {
+  const input = document.getElementById('team-code-input');
+  const feedback = document.getElementById('code-feedback');
+  const code = input.value.trim();
+  if (!code) return;
+
+  const res = await fetch(`${API_URL}/teams/${session.teamId}/submit-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const data = await res.json();
+
+  if (data.correct) {
+    feedback.innerHTML = `<span style="color:#2F6B3A;">✅ Bravo, vous avancez !</span>`;
+    setTimeout(renderDashboard, 1200);
+  } else {
+    feedback.innerHTML = `<span style="color:#9C2E2E;">❌ Code incorrect</span>`;
+    input.value = '';
+  }
+}
+
+async function onBuzz() {
+  const feedback = document.getElementById('buzz-feedback');
+  const res = await fetch(`${API_URL}/bonus/${bonusActive.bonus_id}/buzz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ team_id: session.teamId }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    feedback.textContent = `Tu as buzzé en position n°${data.rank} !`;
+  } else {
+    feedback.textContent = data.detail || 'Déjà buzzé';
+  }
+}
+
+function connectWebSocket() {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.event === 'bonus_started') {
+      bonusActive = { active: true, bonus_id: message.bonus_id, prompt: message.prompt };
+      renderBonusSlot();
+    }
+    if (message.event === 'bonus_ended') {
+      bonusActive = null;
+      renderBonusSlot();
+    }
+    if (message.event === 'team_advanced' && session && message.team_id === session.teamId) {
+      const badge = document.querySelector('.points-badge');
+      if (badge) badge.textContent = `⭐ ${message.team_points} points`;
+    }
+  };
+}
+
+// ---------- Démarrage ----------
+connectWebSocket();
+if (session) {
+  renderDashboard();
+} else {
+  renderLogin();
+}
+</script>
+</body>
+</html>

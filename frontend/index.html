@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="theme.css">
+  <title>Cafe Shot & Co</title>
+</head>
+<body>
+  <h1>Big Game by Cafe Shot & Co</h1>
+
+  <h2>Plateau de jeux</h2>
+  <p id="ws-status">WebSocket : connexion en cours...</p>
+  <div id="board-container"></div>
+
+  <style>
+  #board-container svg { background: linear-gradient(180deg, #FFF0F8 0%, #E0F7FA 100%); border-radius: 16px; }
+  .stage-node { filter: drop-shadow(0 2px 4px rgba(233,30,140,0.25)); }
+  .team-token { transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  h2 { color: var(--purple); }
+  form input[type=text] { padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--secondary); margin-right: 8px; }
+  form button, #player-form button {
+    background: linear-gradient(90deg, var(--primary), var(--purple));
+    color: white; border: none; padding: 11px 20px; border-radius: 999px;
+    font-weight: 700; cursor: pointer;
+  }
+  #players-list, ul { list-style: none; padding: 0; }
+  #players-list li {
+    background: var(--card-bg); border-radius: 12px; padding: 10px 16px; margin-bottom: 6px;
+    box-shadow: 0 2px 6px rgba(233,30,140,0.08);
+  }
+  #ws-status { text-align: center; font-size: 13px; color: var(--text-muted); }
+  </style>
+
+<script src="avatar.js"></script>
+
+  <script>
+    const API_URL = window.location.origin + '/api';
+
+    // ---------- Chiffres romains ----------
+    function toRoman(num) {
+      const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+      let result = '';
+      for (const [value, symbol] of map) { while (num >= value) { result += symbol; num -= value; } }
+      return result;
+    }
+
+    // ---------- Données ----------
+    let stagesData = [];
+    let teamsData = [];
+    let stagePoints = [];
+    let playersData = [];
+
+    async function loadStages() {
+      const res = await fetch(`${API_URL}/stages`);
+      stagesData = (await res.json()).sort((a,b) => a.order - b.order);
+    }
+    async function loadTeams() {
+      const res = await fetch(`${API_URL}/teams`);
+      teamsData = await res.json();
+    }
+    async function loadFullPlayers() {
+    const res = await fetch(`${API_URL}/players`);
+    playersData = await res.json();
+    }
+
+    function buildPathPoints(n) {
+      const pts = [];
+      const stepY = 110;
+      for (let i = 0; i < n; i++) {
+        const y = 90 + i * stepY;
+        const x = (i % 2 === 0) ? 100 : 300;
+        pts.push({ x, y });
+      }
+      return pts;
+    }
+
+    // ---------- Dessine le plateau STATIQUE (route + étapes) une seule fois ----------
+    function initBoard() {
+      const container = document.getElementById('board-container');
+      const n = stagesData.length;
+      if (n === 0) { container.innerHTML = '<p>Aucune étape configurée.</p>'; return; }
+
+      stagePoints = buildPathPoints(n);
+      const height = 90 + (n - 1) * 110 + 100;
+
+      let pathD = `M ${stagePoints[0].x} ${stagePoints[0].y}`;
+      for (let i = 1; i < stagePoints.length; i++) {
+        const prev = stagePoints[i-1], cur = stagePoints[i];
+        const midY = (prev.y + cur.y) / 2;
+        pathD += ` C ${prev.x} ${midY}, ${cur.x} ${midY}, ${cur.x} ${cur.y}`;
+      }
+
+      let nodes = '';
+      stagePoints.forEach((p, i) => {
+        nodes += `
+          <g class="stage-node">
+            <circle cx="${p.x}" cy="${p.y}" r="20" fill="url(#nodeGradient)" stroke="#E91E8C" stroke-width="2.5"/>
+            <text x="${p.x}" y="${p.y+6}" text-anchor="middle" font-size="15" fill="#B3126A" font-weight="700">${toRoman(i+1)}</text>
+          </g>
+        `;
+      });
+
+      const last = stagePoints[stagePoints.length - 1];
+
+      container.innerHTML = `
+        <svg id="board-svg" viewBox="0 0 400 ${height}" style="width:100%; max-width:420px; display:block; margin:auto;">
+          <defs>
+            <radialGradient id="nodeGradient" cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#FFD6EC"/>
+              <stop offset="100%" stop-color="#B983FF"/>
+            </radialGradient>
+          </defs>
+          <path d="${pathD}" fill="none" stroke="#00BFA5" stroke-width="5" stroke-dasharray="1 14" stroke-linecap="round"/>
+          ${nodes}
+          <text x="${last.x}" y="${last.y - 32}" text-anchor="middle" font-size="20">🏁</text>
+          <g id="tokens-layer"></g>
+        </svg>
+      `;
+    }
+
+    // ---------- Crée ou met à jour uniquement les JETONS (animation fluide) ----------
+    function renderTokens() {
+      const layer = document.getElementById('tokens-layer');
+      if (!layer) return;
+      const n = stagePoints.length;
+
+      const byStage = {};
+      teamsData.forEach(t => {
+        const idx = Math.min(Math.max(t.stage_index, 0), n - 1);
+        byStage[idx] = byStage[idx] || [];
+        byStage[idx].push(t);
+      });
+
+      teamsData.forEach(team => {
+        const idx = Math.min(Math.max(team.stage_index, 0), n - 1);
+        const group = byStage[idx];
+        const gi = group.findIndex(t => t.id === team.id);
+        const angle = (gi / Math.max(group.length, 1)) * Math.PI * 2;
+        const r = group.length > 1 ? 45 : 0;
+        const p = stagePoints[idx];
+        const tx = p.x + Math.cos(angle) * r;
+        const ty = p.y - 65 + Math.sin(angle) * 10;
+
+        const members = playersData.filter(pl => pl.team_id === team.id).slice(0, 4);
+
+        let g = document.getElementById(`token-${team.id}`);
+        if (!g) {
+          g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.setAttribute('id', `token-${team.id}`);
+          g.setAttribute('class', 'team-token');
+          layer.appendChild(g);
+        }
+
+        const spacing = 32;
+        const startX = -((members.length - 1) * spacing) / 2;
+        const avatarsHtml = members.map((pl, mi) => {
+          const cfg = pl.avatar_config ? JSON.parse(pl.avatar_config) : DEFAULT_AVATAR;
+          const mx = startX + mi * spacing;
+          const clipId = `clip-${pl.id}`;
+          return `
+            <g transform="translate(${mx},0)">
+              <clipPath id="${clipId}"><circle cx="0" cy="0" r="20"/></clipPath>
+              <circle r="21" fill="white" stroke="${team.color || '#E91E8C'}" stroke-width="3"/>
+              <g clip-path="url(#${clipId})">
+                <g transform="scale(0.2) translate(-110,-110)">
+                  ${buildAvatarInner(cfg)}
+                </g>
+              </g>
+            </g>
+          `;
+        }).join('');
+
+        g.innerHTML = `
+          ${avatarsHtml}
+          <text y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#B3126A">${team.name}</text>
+        `;
+
+        g.style.transform = `translate(${tx}px, ${ty}px)`;
+      });
+    }
+    // ---------- WebSocket ----------
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+    ws.onopen = () => document.getElementById('ws-status').textContent = 'WebSocket : connecté ✅';
+    ws.onclose = () => document.getElementById('ws-status').textContent = 'WebSocket : déconnecté ❌';
+    ws.onerror = () => document.getElementById('ws-status').textContent = 'WebSocket : erreur de connexion';
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.event === 'team_advanced') {
+        const team = teamsData.find(t => t.id === message.team_id);
+        if (team) {
+          team.stage_index = message.stage_index;
+          team.team_points = message.team_points;
+          renderTokens();
+        }
+      }
+      if (message.event === 'trial_ended') {
+        const container = document.getElementById('board-container');
+        const winner = message.results.results[0];
+        container.innerHTML = `
+          <div style="text-align:center; padding:30px; background:var(--card-bg); border-radius:16px;">
+            <h2 style="color:var(--primary-dark);">⚖️ Verdict rendu</h2>
+            <p style="font-size:20px; font-weight:700; margin:16px 0;">${winner.suspect_name}</p>
+            <p style="color:var(--text-muted);">${winner.vote_count} voix sur ${message.results.total_votes}</p>
+          </div>
+        `;
+      }
+    };
+
+    // ---------- Chargement initial ----------
+    async function init() {
+      await loadFullPlayers();
+      await loadStages();
+      await loadTeams();
+      initBoard();
+      renderTokens();
+    }
+    init();
+  </script>
+</body>
+</html>
