@@ -926,13 +926,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 from fastapi.responses import FileResponse
 
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
     if full_path == "" or full_path == "/":
         full_path = "index.html"
-    file_path = f"../frontend/{full_path}"
+    file_path = f"frontend/{full_path}"
     if os.path.exists(file_path) and not full_path.startswith("api"):
         return FileResponse(file_path)
-    return FileResponse("../frontend/index.html")
+    return FileResponse("frontend/index.html")
