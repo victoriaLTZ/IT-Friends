@@ -216,6 +216,19 @@ class BonusCreate(SQLModel):
 # ---------------------------------------------------------------------------
 SQLModel.metadata.create_all(engine)
 
+def ensure_column(table: str, column: str, col_type: str = "TEXT"):
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql(f"PRAGMA table_info({table})")
+        existing_columns = [row[1] for row in result]
+        if column not in existing_columns:
+            conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            conn.commit()
+
+ensure_column("team", "suspect_player_id", "TEXT")
+ensure_column("team", "clue_penalty", "INTEGER DEFAULT 0")
+ensure_column("clue", "created_at", "TEXT")
+ensure_column("bonusquestion", "image_url", "TEXT")
+
 # ---------------------------------------------------------------------------
 # App FastAPI
 # ---------------------------------------------------------------------------
