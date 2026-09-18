@@ -365,18 +365,25 @@ async function renderTargetQuestion(q) {
   let targetId = state.answers[q.key + '__targetId'];
 
   if (!targetName) {
-    card.innerHTML = `<h2>Chargement...</h2>`;
-    const res = await fetch(`${API_URL}/players/${state.playerId}/target-for-question/${q.key}`);
-    if (!res.ok) {
-      card.innerHTML = `<h2>Erreur, réessaie plus tard</h2><p>Ton code : <strong>${state.accessCode}</strong></p>`;
+    card.innerHTML = `<h2>Chargement...</h2><p id="retry-msg" style="text-align:center; font-size:13px; color:var(--text-muted);"></p>`;
+    try {
+      const res = await fetch(`${API_URL}/players/${state.playerId}/target-for-question/${q.key}`);
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      targetName = data.target_name;
+      targetId = data.target_id;
+      state.answers[q.key + '__targetName'] = targetName;
+      state.answers[q.key + '__targetId'] = targetId;
+      saveState();
+    } catch (err) {
+      card.innerHTML = `
+        <h2>Petit souci de connexion</h2>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">Réessaie, ou reviens plus tard avec ton code : <strong>${state.accessCode}</strong></p>
+        <button id="retry-btn">Réessayer</button>
+      `;
+      document.getElementById('retry-btn').onclick = () => renderTargetQuestion(q);
       return;
     }
-    const data = await res.json();
-    targetName = data.target_name;
-    targetId = data.target_id;
-    state.answers[q.key + '__targetName'] = targetName;
-    state.answers[q.key + '__targetId'] = targetId;
-    saveState();
   }
 
   const label = q.label.replace('{target}', targetName);
@@ -422,16 +429,20 @@ async function onPhotoSelected(e) {
   if (!file) return;
   const statusMsg = document.getElementById('status-msg');
   statusMsg.textContent = 'Envoi de la photo...';
-  const url = await apiUploadPhoto(file);
 
-  const questionIndex = state.step - 2;
-  const q = QUESTIONS[questionIndex];
-  state.answers[q.key] = url;
-  saveState();
+  try {
+    const url = await apiUploadPhoto(file);
+    const questionIndex = state.step - 2;
+    const q = QUESTIONS[questionIndex];
+    state.answers[q.key] = url;
+    saveState();
 
-  document.getElementById('photo-preview').src = url;
-  document.getElementById('photo-preview').style.display = 'block';
-  statusMsg.textContent = 'Photo envoyée ✅';
+    document.getElementById('photo-preview').src = url;
+    document.getElementById('photo-preview').style.display = 'block';
+    statusMsg.textContent = 'Photo envoyée ✅';
+  } catch (err) {
+    statusMsg.textContent = "Erreur d'envoi, réessaie (vérifie ta connexion) !";
+  }
 }
 
 async function onAnswerSubmit(q) {
@@ -451,7 +462,12 @@ async function onAnswerSubmit(q) {
   state.answers[q.key] = value;
   const targetId = q.type === 'target_text' ? state.answers[q.key + '__targetId'] : null;
   const targetName = q.type === 'target_text' ? state.answers[q.key + '__targetName'] : null;
-  await apiSaveAnswer(state.playerId, q.key, value, targetId, targetName);
+  try {
+    await apiSaveAnswer(state.playerId, q.key, value, targetId, targetName);
+  } catch (err) {
+    document.getElementById('status-msg').textContent = "Erreur réseau, réessaie !";
+    return;
+  }
   state.step += 1;
   saveState();
   render();
