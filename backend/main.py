@@ -658,6 +658,21 @@ def delete_team(team_id: str):
         session.commit()
         return {"deleted": True, "id": team_id}
 
+class TeamReset(SQLModel):
+    stage_index: int = 0
+    team_points: int = 0
+
+@app.put("/api/teams/{team_id}/reset")
+def reset_team_progress(team_id: str, data: TeamReset = TeamReset()):
+    with Session(engine) as session:
+        team = session.get(Team, team_id)
+        if not team:
+            raise HTTPException(status_code=404, detail="Équipe introuvable")
+        team.stage_index = data.stage_index
+        team.team_points = data.team_points
+        session.add(team)
+        session.commit()
+        return {"team": team.name, "stage_index": team.stage_index, "team_points": team.team_points}
 # ---------------------------------------------------------------------------
 # Gestion des pages
 # ---------------------------------------------------------------------------
