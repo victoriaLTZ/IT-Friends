@@ -750,9 +750,23 @@ def create_clues_bulk(data: list[ClueCreate]):
 @app.get("/api/teams/{team_id}/clues")
 def get_team_clues(team_id: str):
     with Session(engine) as session:
+        team = session.get(Team, team_id)
+        if not team:
+            raise HTTPException(status_code=404, detail="Équipe introuvable")
+
+        completed_orders = session.exec(
+            select(TeamStationOrder).where(
+                TeamStationOrder.team_id == team_id,
+                TeamStationOrder.position < team.stage_index,
+            )
+        ).all()
+        completed_stage_ids = {o.stage_id for o in completed_orders}
+
         clues = session.exec(select(Clue).where(Clue.team_id == team_id)).all()
+        visible_clues = [c for c in clues if c.stage_id in completed_stage_ids]
+
         result = []
-        for c in clues:
+        for c in visible_clues:
             target = session.get(Player, c.target_player_id)
             stage = session.get(Stage, c.stage_id)
             result.append({
