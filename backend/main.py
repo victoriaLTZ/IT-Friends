@@ -29,6 +29,38 @@ TEAM_MEMBERSHIP = {
     "antoine": "Metro-Goldwyn-Martini", "horti": "Metro-Goldwyn-Martini", "sab": "Metro-Goldwyn-Martini",
 }
 
+CLUE_TEMPLATES = {
+    'favorite_book': ("Un exemplaire de {valeur}, page cornée, gisait par terre au milieu des éclats de verre.", "neutre"),
+    'favorite_quote': ("Griffonnée à la hâte sur un ticket retrouvé sur place : « {valeur} ». L'écriture ressemble étrangement à celle de {target}.", "charge"),
+    'favorite_drink': ("Un verre encore taché de {valeur} traînait sur le comptoir voisin, comme oublié dans la précipitation.", "neutre"),
+    'borrowed_object': ("Un collègue témoigne : « {target} a la fâcheuse manie de garder ce qu'on lui prête, comme {valeur} que j'attends toujours. »", "charge"),
+    'phobia': ("Le chien du bijoutier, pourtant féroce, n'a pas aboyé une seule fois. Étrange, sachant que {target} a une peur panique de {valeur}...", "decharge"),
+    'hidden_talent': ("Le voleur a crocheté la serrure avec une dextérité suspecte. Comme par hasard, {target} sait aussi {valeur}.", "charge"),
+    'dream_trip': ("Un billet froissé pour {valeur} a été retrouvé près de la vitrine forcée.", "charge"),
+    'impulse_purchase': ("Le lendemain du vol, {target} s'est offert {valeur} — étrangement, pile la valeur d'un bijou fondu au marché noir.", "charge"),
+    'looping_song': ("Les voisins jurent avoir entendu une voiture démarrer en trombe, radio hurlant {valeur}.", "charge"),
+    'old_style': ("Les caméras de surveillance montrent distinctement un individu portant {valeur} s'éloigner des lieux.", "charge"),
+    'weird_sleep_spot': ("Interrogé(e), {target} affirme être allé(e) dormir {valeur} cette nuit-là — personne pour confirmer.", "charge"),
+    'fun_fact_about_other': ("Une rumeur circule : {valeur}", "neutre"),
+}
+
+CLUE_IMAGE_MAP = {
+    'favorite_book': '/uploads/URL_LIVRE.jpg',
+    'favorite_quote': '/uploads/URL_CITATION.jpg',
+    'favorite_drink': '/uploads/URL_BOISSON.jpg',
+    'phobia': '/uploads/URL_CHIEN.jpg',
+    'hidden_talent': '/uploads/URL_CROCHETAGE.jpg',
+    'dream_trip': '/uploads/URL_BILLET.jpg',
+    'impulse_purchase': '/uploads/URL_MONTRE.jpg',
+    'looping_song': '/uploads/URL_VOITURE.jpg',
+    'old_style': '/uploads/URL_CAMERA.jpg',
+}
+
+STATION_CLUE_PLAN = [
+    (0, 'favorite_book'), (1, 'phobia'), (0, 'borrowed_object'),
+    (1, 'old_style'), (0, 'looping_song'), (1, 'dream_trip'),
+]
+
 # ---------------------------------------------------------------------------
 # Connexion à la base de données
 # ---------------------------------------------------------------------------
@@ -748,6 +780,64 @@ def get_current_station(team_id: str):
         return {"riddle": station.hint, "position": team.stage_index, "finished": False}
 
 
+@app.post("/api/generate-clues")
+def generate_clues():
+    created, skipped = [], []
+    with Session(engine) as session:
+        teams = session.exec(select(Team)).all()
+        for team in teams:
+            rivals = [t for t in teams if t.id != team.id and t.suspect_player_id]
+            if len(rivals) < 2:
+                skipped.append({"team": team.name, "reason": "suspects adverses pas encore désignés"})
+                continue
+
+            orders = session.exec(
+                select(TeamStationOrder).where(TeamStationOrder.team_id == team.id).order_by(TeamStationOrder.position)
+            ).all()
+
+            for order in orders:
+                if order.position >= len(STATION_CLUE_PLAN):
+                    continue
+                rival_idx, key = STATION_CLUE_PLAN[order.position]
+                rival_team = rivals[rival_idx]
+                suspect = session.get(Player, rival_team.suspect_player_id)
+
+                existing = session.exec(
+                    select(Clue).where(
+                        Clue.team_id == team.id,
+                        Clue.stage_id == order.stage_id,
+                        Clue.target_player_id == suspect.id,
+                    )
+                ).first()
+                if existing:
+                    continue
+
+                answer = session.exec(
+                    select(ProfileAnswer).where(
+                        ProfileAnswer.about_player_id == suspect.id,
+                        ProfileAnswer.question_key == key,
+                    )
+                ).first()
+                if not answer:
+                    skipped.append({"team": team.name, "reason": f"réponse '{key}' pas encore reçue pour {suspect.name}"})
+                    continue
+
+                template, kind = CLUE_TEMPLATES[key]
+                text = template.replace("{target}", suspect.name).replace("{valeur}", answer.value)
+
+                session.add(Clue(
+                    stage_id=order.stage_id,
+                    team_id=team.id,
+                    target_player_id=suspect.id,
+                    text=text,
+                    kind=kind,
+                    image_url=CLUE_IMAGE_MAP.get(key),
+                ))
+                created.append({"team": team.name, "suspect": suspect.name, "key": key})
+
+        session.commit()
+    return {"created": created, "skipped": skipped}
+
 @app.post("/api/clues/bulk")
 def create_clues_bulk(data: list[ClueCreate]):
     with Session(engine) as session:
@@ -913,6 +1003,15 @@ def get_trial_suspects():
             })
         return result
 
+@app.get("/api/admin/suspects")
+def admin_view_suspects():
+    with Session(engine) as session:
+        teams = session.exec(select(Team)).all()
+        result = []
+        for t in teams:
+            suspect = session.get(Player, t.suspect_player_id) if t.suspect_player_id else None
+            result.append({"team": t.name, "suspect": suspect.name if suspect else None})
+        return result
 
 @app.post("/api/trial/start")
 async def start_trial():
