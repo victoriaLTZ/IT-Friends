@@ -413,6 +413,20 @@ async function onNameSubmit() {
     saveState();
     render();
   } catch (err) {
+    // Si le profil existe déjà, on récupère son id pour reprendre au lieu de bloquer
+    try {
+      const res = await fetch(`${API_URL}/players/by-name/${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        state.playerId = data.id;
+        state.accessCode = data.access_code;
+        state.name = name;
+        state.step = 1;
+        saveState();
+        render();
+        return;
+      }
+    } catch (e2) {}
     statusMsg.textContent = err.message;
   }
 }
@@ -474,7 +488,22 @@ async function onAnswerSubmit(q) {
 }
 
 // ---------- Démarrage ----------
-render();
+async function initApp() {
+  // Si le playerId est manquant mais qu'on a déjà un prénom enregistré, on se répare automatiquement
+  if (!state.playerId && state.name) {
+    try {
+      const res = await fetch(`${API_URL}/players/by-name/${encodeURIComponent(state.name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        state.playerId = data.id;
+        state.accessCode = data.access_code;
+        saveState();
+      }
+    } catch (e) {}
+  }
+  render();
+}
+initApp();
 </script>
 </body>
 </html>

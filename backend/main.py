@@ -351,6 +351,14 @@ async def upload_file(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, f)
     return {"url": f"/uploads/{filename}"}
 
+@app.get("/api/players/by-name/{name}")
+def get_player_by_name(name: str):
+    with Session(engine) as session:
+        player = session.exec(select(Player).where(Player.name.ilike(name))).first()
+        if not player:
+            raise HTTPException(status_code=404, detail="Introuvable")
+        return {"id": player.id, "access_code": player.access_code}
+    
 @app.post("/api/players", response_model=Player)
 def create_player(data: PlayerCreate):
     roster_lower = [n.lower() for n in ROSTER]
