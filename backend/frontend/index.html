@@ -65,6 +65,28 @@
     .alert-body { font-size: 15px; color: #D9CFCF; margin: 10px 0; line-height: 1.6; }
     .alert-body strong { color: #FF8A80; }
     .alert-footer { font-size: 13px; color: #9C8B8B; margin-top: 16px; font-style: italic; }
+
+    @keyframes podiumRise {
+      from { transform: translateY(40px) scaleY(0.3); opacity: 0; }
+      to { transform: translateY(0) scaleY(1); opacity: 1; }
+    }
+    @keyframes trophySpin {
+      0%, 100% { transform: rotate(-8deg) scale(1); }
+      50% { transform: rotate(8deg) scale(1.1); }
+    }
+    .podium-title { text-align:center; font-size:20px; font-weight:700; color:var(--primary-dark); margin-bottom:4px; }
+    .podium-trophy { text-align:center; font-size:38px; animation: trophySpin 1.6s ease-in-out infinite; margin-bottom:6px; }
+    .podium-sub { text-align:center; font-size:13px; color:var(--text-muted); margin-bottom:18px; }
+    .podium-blocks { display:flex; align-items:flex-end; justify-content:center; gap:10px; }
+    .pblock { width:100px; border-radius:12px 12px 0 0; text-align:center; padding-top:10px; animation: podiumRise 0.7s ease forwards; transform-origin:bottom; opacity:0; }
+    .pblock .name { font-size:12px; font-weight:700; color:white; padding:0 4px; line-height:1.2; margin-bottom:4px; }
+    .pblock .pts { font-size:11px; color:rgba(255,255,255,0.85); margin-bottom:8px; }
+    .pblock .rank { font-size:22px; font-weight:800; color:white; }
+    .p1 { height:150px; background:linear-gradient(180deg,#FFD54F,#E9A800); animation-delay:0.5s; }
+    .p2 { height:110px; background:linear-gradient(180deg,#CFD8DC,#90A4AE); animation-delay:0.2s; }
+    .p3 { height:80px; background:linear-gradient(180deg,#D7A26A,#A9683A); animation-delay:0.8s; }
+
+
   </style>
 </head>
 <body>
@@ -280,6 +302,21 @@
     document.getElementById('scoreboard').innerHTML = '';
   }
 
+  function renderPodium(standings) {
+    const order = [standings[1], standings[0], standings[2]]; // 2e, 1er, 3e pour l'effet podium
+    document.getElementById('board-container').innerHTML = `
+      <p class="podium-title">Le jeu de piste est terminé !</p>
+      <div class="podium-trophy">🏆</div>
+      <p class="podium-sub">Classement final des maisons de production</p>
+      <div class="podium-blocks">
+        <div class="pblock p2"><div class="name">${order[0].name}</div><div class="pts">⭐ ${order[0].points} pts</div><div class="rank">2</div></div>
+        <div class="pblock p1"><div class="name">${order[1].name}</div><div class="pts">⭐ ${order[1].points} pts</div><div class="rank">1</div></div>
+        <div class="pblock p3"><div class="name">${order[2].name}</div><div class="pts">⭐ ${order[2].points} pts</div><div class="rank">3</div></div>
+      </div>
+    `;
+    document.getElementById('scoreboard').innerHTML = '';
+  }
+
   function applyPhase(phase) {
     currentPhase = phase;
     if (phase === 'locked') {
@@ -328,6 +365,10 @@
         </div>
       `;
       document.getElementById('scoreboard').innerHTML = '';
+    }
+
+    if (message.event === 'rally_finished') {
+      renderPodium(message.standings);
     }
   };
 

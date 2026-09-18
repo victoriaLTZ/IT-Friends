@@ -103,6 +103,9 @@ class AnswerSubmit(SQLModel):
     about_player_id: Optional[str] = None
     about_player_name: Optional[str] = None
 
+class AnswerAttempt(SQLModel):
+    team_id: str
+    answer: str
 
 class AvatarUpdate(SQLModel):
     avatar_config: str
@@ -135,6 +138,7 @@ class CodeSubmit(SQLModel):
 class GameState(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     phase: str = "locked"  # "locked" | "alert" | "playing"
+    rally_finished: bool = False
 
 class PhaseUpdate(SQLModel):
     phase: str
@@ -169,7 +173,10 @@ class BonusQuestion(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     prompt: str
     image_url: Optional[str] = None
+    correct_answer: Optional[str] = None
+    winner_team_id: Optional[str] = None
     active: bool = True
+
 
 
 class Buzz(SQLModel, table=True):
@@ -209,6 +216,7 @@ class ClueCreate(SQLModel):
 class BonusCreate(SQLModel):
     prompt: str
     image_url: Optional[str] = None
+    correct_answer: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +236,9 @@ ensure_column("team", "suspect_player_id", "TEXT")
 ensure_column("team", "clue_penalty", "INTEGER DEFAULT 0")
 ensure_column("clue", "created_at", "TEXT")
 ensure_column("bonusquestion", "image_url", "TEXT")
+ensure_column("bonusquestion", "correct_answer", "TEXT")
+ensure_column("bonusquestion", "winner_team_id", "TEXT")
+ensure_column("gamestate", "rally_finished", "BOOLEAN DEFAULT 0")
 
 # ---------------------------------------------------------------------------
 # App FastAPI
@@ -779,6 +790,24 @@ async def submit_code(team_id: str, data: CodeSubmit):
         session.commit()
         session.refresh(team)
 
+        # ... après team.stage_index += 1, team.team_points += 10, session.commit(), session.refresh(team)
+
+        all_stations_count = session.exec(select(Stage)).all()
+        if team.stage_index >= len(all_stations_count):
+            state = get_or_create_game_state(session)
+            if not state.rally_finished:
+                state.rally_finished = True
+                session.add(state)
+                session.commit()
+
+                all_teams = session.exec(select(Team)).all()
+                standings = sorted(all_teams, key=lambda t: t.team_points, reverse=True)
+                await manager.broadcast({
+                    "event": "rally_finished",
+                    "winner_team_id": team.id,
+                    "standings": [{"name": t.name, "points": t.team_points, "color": t.color} for t in standings],
+                })
+
         clue = session.exec(
             select(Clue).where(Clue.stage_id == station.id, Clue.team_id == team_id)
         ).first()
@@ -795,6 +824,40 @@ async def submit_code(team_id: str, data: CodeSubmit):
         })
 
         return {"correct": True, "message": "Bravo, vous avancez !", "team": team, "clue": clue_data}
+
+@app.post("/api/bonus/{bonus_id}/answer")
+async def submit_bonus_answer(bonus_id: str, data: AnswerAttempt):
+    with Session(engine) as session:
+        bonus = session.get(BonusQuestion, bonus_id)
+        if not bonus or not bonus.active:
+            return {"correct": False, "already_resolved": True}
+
+        given = data.answer.strip().lower()
+        expected = (bonus.correct_answer or "").strip().lower()
+        if not expected or given != expected:
+            return {"correct": False}
+
+        team = session.get(Team, data.team_id)
+        if not team:
+            raise HTTPException(status_code=404, detail="Équipe introuvable")
+
+        bonus.active = False
+        bonus.winner_team_id = team.id
+        session.add(bonus)
+
+        team.team_points += 10
+        session.add(team)
+        session.commit()
+        session.refresh(team)
+
+    await manager.broadcast({
+        "event": "bonus_won",
+        "bonus_id": bonus_id,
+        "team_id": team.id,
+        "team_name": team.name,
+        "team_points": team.team_points,
+    })
+    return {"correct": True, "team_points": team.team_points}
 
 # ---------------------------------------------------------------------------
 # Endpoints du procès ------ 
@@ -908,7 +971,7 @@ async def end_trial():
 # ---------------------------------------------------------------------------
 @app.post("/api/bonus", response_model=BonusQuestion)
 async def start_bonus(data: BonusCreate):
-    bonus = BonusQuestion(prompt=data.prompt, image_url=data.image_url, active=True)
+    bonus = BonusQuestion(prompt=data.prompt, image_url=data.image_url, correct_answer=data.correct_answer, active=True)
     with Session(engine) as session:
         session.add(bonus)
         session.commit()
@@ -921,38 +984,6 @@ async def start_bonus(data: BonusCreate):
         "image_url": bonus.image_url,
     })
     return bonus
-
-
-@app.post("/api/bonus/{bonus_id}/buzz")
-async def buzz(bonus_id: str, data: AssignTeam):
-    with Session(engine) as session:
-        bonus = session.get(BonusQuestion, bonus_id)
-        if not bonus or not bonus.active:
-            raise HTTPException(status_code=400, detail="Cette question n'est plus active")
-
-        existing = session.exec(
-            select(Buzz).where(Buzz.bonus_id == bonus_id, Buzz.team_id == data.team_id)
-        ).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Cette équipe a déjà buzzé")
-
-        buzz_entry = Buzz(bonus_id=bonus_id, team_id=data.team_id)
-        session.add(buzz_entry)
-        session.commit()
-        session.refresh(buzz_entry)
-
-        all_buzzes = session.exec(
-            select(Buzz).where(Buzz.bonus_id == bonus_id).order_by(Buzz.timestamp)
-        ).all()
-        rank = next(i for i, b in enumerate(all_buzzes) if b.id == buzz_entry.id) + 1
-
-    await manager.broadcast({
-        "event": "buzz_update",
-        "bonus_id": bonus_id,
-        "team_id": data.team_id,
-        "rank": rank,
-    })
-    return {"rank": rank}
 
 
 @app.post("/api/bonus/{bonus_id}/end")
@@ -968,17 +999,6 @@ async def end_bonus(bonus_id: str):
     await manager.broadcast({"event": "bonus_ended", "bonus_id": bonus_id})
     return {"ended": True}
 
-@app.get("/api/bonus/{bonus_id}/buzzes")
-def get_bonus_buzzes(bonus_id: str):
-    with Session(engine) as session:
-        buzzes = session.exec(
-            select(Buzz).where(Buzz.bonus_id == bonus_id).order_by(Buzz.timestamp)
-        ).all()
-        result = []
-        for i, b in enumerate(buzzes):
-            team = session.get(Team, b.team_id)
-            result.append({"rank": i + 1, "team_id": b.team_id, "team_name": team.name if team else "?"})
-        return result
     
 # ---------------------------------------------------------------------------
 # WebSocket

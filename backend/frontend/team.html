@@ -169,11 +169,12 @@ function renderBonusSlot() {
         <h3>⚡ Question spéciale !</h3>
         ${bonusActive.image_url ? `<img src="${bonusActive.image_url}" style="width:100%; border-radius:10px; margin-bottom:10px;">` : ''}
         <p style="margin-bottom:12px;">${bonusActive.prompt}</p>
-        <button id="buzz-btn">BUZZ !</button>
+        <input type="text" id="bonus-answer-input" placeholder="Votre réponse" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:8px;">
+        <button id="bonus-submit-btn" style="background:white; color:var(--primary);">Valider</button>
         <p id="buzz-feedback" style="font-size:13px; margin-top:8px;"></p>
       </div>
     `;
-    document.getElementById('buzz-btn').onclick = onBuzz;
+    document.getElementById('bonus-submit-btn').onclick = onBonusAnswer;
   } else {
     slot.innerHTML = '';
   }
@@ -201,18 +202,26 @@ async function onSubmitCode() {
   }
 }
 
-async function onBuzz() {
+async function onBonusAnswer() {
+  const input = document.getElementById('bonus-answer-input');
   const feedback = document.getElementById('buzz-feedback');
-  const res = await fetch(`${API_URL}/bonus/${bonusActive.bonus_id}/buzz`, {
+  const answer = input.value.trim();
+  if (!answer) return;
+
+  const res = await fetch(`${API_URL}/bonus/${bonusActive.bonus_id}/answer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ team_id: session.teamId }),
+    body: JSON.stringify({ team_id: session.teamId, answer }),
   });
   const data = await res.json();
-  if (res.ok) {
-    feedback.textContent = `Tu as buzzé en position n°${data.rank} !`;
+
+  if (data.correct) {
+    feedback.innerHTML = `<span style="color:#C8F5D0;">✅ Bonne réponse !</span>`;
+  } else if (data.already_resolved) {
+    feedback.innerHTML = `Une autre équipe a déjà trouvé.`;
   } else {
-    feedback.textContent = data.detail || 'Déjà buzzé';
+    feedback.innerHTML = `❌ Pas la bonne réponse, réessayez !`;
+    input.value = '';
   }
 }
 
@@ -225,9 +234,14 @@ function connectWebSocket() {
       bonusActive = { active: true, bonus_id: message.bonus_id, prompt: message.prompt, image_url: message.image_url };
       renderBonusSlot();
     }
-    if (message.event === 'bonus_ended') {
+    if (message.event === 'bonus_won') {
       bonusActive = null;
-      renderBonusSlot();
+      const card = document.getElementById('card');
+      const winnerBanner = document.createElement('div');
+      winnerBanner.className = 'bonus-banner';
+      winnerBanner.innerHTML = `<h3>🏆 ${message.team_name} remporte la question !</h3><p>+10 points</p>`;
+      card.prepend(winnerBanner);
+      setTimeout(() => { renderDashboard(); }, 3000);
     }
     if (message.event === 'team_advanced' && session && message.team_id === session.teamId) {
       const badge = document.querySelector('.points-badge');

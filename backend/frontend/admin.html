@@ -24,19 +24,8 @@
     color: white; border: none; border-radius: 999px;
     padding: 12px 18px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%;
   }
-  button.danger { background: linear-gradient(90deg, #D4232C, #8B1418); }
   button:disabled { opacity: 0.5; }
   .preview-img { width: 100%; border-radius: 10px; margin-bottom: 10px; display: none; }
-  .buzz-row {
-    display: flex; justify-content: space-between; background: white;
-    border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; font-size: 14px;
-  }
-  .team-pick {
-    display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 10px;
-    background: white; margin-bottom: 6px; cursor: pointer; border: 2px solid transparent;
-  }
-  .team-pick.selected { border-color: var(--primary); }
-  .dot { width: 12px; height: 12px; border-radius: 50%; }
   #status { text-align: center; font-size: 13px; color: var(--text-muted); }
 </style>
 </head>
@@ -47,13 +36,13 @@
     <h2>🎬 Contrôle du plateau</h2>
     <p style="font-size:13px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">Phase actuelle : <strong id="current-phase-label">...</strong></p>
     <div style="display:flex; gap:8px; margin-bottom:6px;">
-        <button id="phase-locked-btn" style="background:linear-gradient(90deg,#7C6A8E,#4A3F5C);">🔒 Verrouillé</button>
+      <button id="phase-locked-btn" style="background:linear-gradient(90deg,#7C6A8E,#4A3F5C);">🔒 Verrouillé</button>
     </div>
     <div style="display:flex; gap:8px; margin-bottom:6px;">
-        <button id="phase-alert-btn" style="background:linear-gradient(90deg,#D4232C,#8B1418);">🚨 Alerte</button>
+      <button id="phase-alert-btn" style="background:linear-gradient(90deg,#D4232C,#8B1418);">🚨 Alerte</button>
     </div>
     <div style="display:flex; gap:8px;">
-        <button id="phase-playing-btn" style="background:linear-gradient(90deg,#00BFA5,#7C4DFF);">▶️ Lancer le jeu</button>
+      <button id="phase-playing-btn" style="background:linear-gradient(90deg,#00BFA5,#7C4DFF);">▶️ Lancer le jeu</button>
     </div>
   </div>
 
@@ -62,29 +51,19 @@
     <input type="text" id="prompt-input" placeholder="Ex: Qui est-ce ?">
     <img id="photo-preview" class="preview-img">
     <input type="file" id="photo-input" accept="image/*">
+    <input type="text" id="answer-input" placeholder="La bonne réponse (exacte)">
     <button id="launch-btn">🚀 Lancer sur tous les écrans</button>
     <p id="status"></p>
   </div>
 
-  <div class="card" id="buzz-card" style="display:none;">
-    <h2>Ordre des buzz</h2>
-    <div id="buzz-list"></div>
-    <h2 style="margin-top:16px;">Qui a la bonne réponse ?</h2>
-    <div id="team-picker"></div>
-    <button id="resolve-btn" class="danger" disabled>Valider et pénaliser les 2 autres</button>
+  <div class="card" id="winner-card" style="display:none;">
+    <h2>🏆 Résultat</h2>
+    <p id="winner-text"></p>
   </div>
 
 <script>
   const API_URL = window.location.origin + '/api';
-  let currentBonusId = null;
-  let selectedWinner = null;
   let uploadedImageUrl = null;
-  let teamsCache = [];
-
-  async function loadTeams() {
-    const res = await fetch(`${API_URL}/teams`);
-    teamsCache = await res.json();
-  }
 
   document.getElementById('photo-input').onchange = async (e) => {
     const file = e.target.files[0];
@@ -103,93 +82,59 @@
 
   document.getElementById('launch-btn').onclick = async () => {
     const prompt = document.getElementById('prompt-input').value.trim();
-    if (!prompt) {
-      document.getElementById('status').textContent = 'Écris une question avant de lancer !';
+    const correctAnswer = document.getElementById('answer-input').value.trim();
+    if (!prompt || !correctAnswer) {
+      document.getElementById('status').textContent = 'Renseigne la question ET la bonne réponse !';
       return;
     }
-    const res = await fetch(`${API_URL}/bonus`, {
+    await fetch(`${API_URL}/bonus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, image_url: uploadedImageUrl }),
+      body: JSON.stringify({ prompt, image_url: uploadedImageUrl, correct_answer: correctAnswer }),
     });
-    const data = await res.json();
-    currentBonusId = data.id;
-    selectedWinner = null;
-    document.getElementById('status').textContent = 'Question lancée sur tous les écrans !';
-    document.getElementById('buzz-card').style.display = 'block';
-    renderTeamPicker();
-    pollBuzzes();
+    document.getElementById('status').textContent = "Question lancée, en attente d'une bonne réponse...";
+    document.getElementById('winner-card').style.display = 'none';
   };
-
-  function renderTeamPicker() {
-    const container = document.getElementById('team-picker');
-    container.innerHTML = teamsCache.map(t => `
-      <div class="team-pick" data-id="${t.id}">
-        <div class="dot" style="background:${t.color}"></div>
-        ${t.name}
-      </div>
-    `).join('');
-    container.querySelectorAll('.team-pick').forEach(el => {
-      el.onclick = () => {
-        selectedWinner = el.dataset.id;
-        container.querySelectorAll('.team-pick').forEach(e => e.classList.remove('selected'));
-        el.classList.add('selected');
-        document.getElementById('resolve-btn').disabled = false;
-      };
-    });
-  }
-
-  async function pollBuzzes() {
-    if (!currentBonusId) return;
-    const res = await fetch(`${API_URL}/bonus/${currentBonusId}/buzzes`);
-    const buzzes = await res.json();
-    document.getElementById('buzz-list').innerHTML = buzzes.length === 0
-      ? '<p style="font-size:13px; color:var(--text-muted);">Personne n\'a encore buzzé.</p>'
-      : buzzes.map(b => `<div class="buzz-row"><span>${b.rank}. ${b.team_name}</span></div>`).join('');
-  }
-
-  document.getElementById('resolve-btn').onclick = async () => {
-    if (!currentBonusId || !selectedWinner) return;
-    await fetch(`${API_URL}/bonus/${currentBonusId}/resolve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ winner_team_id: selectedWinner }),
-    });
-    document.getElementById('status').textContent = 'Résolu ! Les 2 autres équipes perdent un indice.';
-    document.getElementById('buzz-card').style.display = 'none';
-    document.getElementById('prompt-input').value = '';
-    document.getElementById('photo-preview').style.display = 'none';
-    uploadedImageUrl = null;
-    currentBonusId = null;
-  };
-
-  // Rafraîchit l'ordre des buzz toutes les 2 secondes pendant qu'une question est active
-  setInterval(() => { if (currentBonusId) pollBuzzes(); }, 2000);
 
   async function loadCurrentPhase() {
-  const res = await fetch(`${API_URL}/game-state`);
-  const data = await res.json();
-  document.getElementById('current-phase-label').textContent =
-    data.phase === 'locked' ? 'Verrouillé 🔒' :
-    data.phase === 'alert' ? 'Alerte 🚨' : 'Jeu en cours ▶️';
+    const res = await fetch(`${API_URL}/game-state`);
+    const data = await res.json();
+    document.getElementById('current-phase-label').textContent =
+      data.phase === 'locked' ? 'Verrouillé 🔒' :
+      data.phase === 'alert' ? 'Alerte 🚨' : 'Jeu en cours ▶️';
   }
 
   async function setPhase(phase) {
-  await fetch(`${API_URL}/game-state`, {
+    await fetch(`${API_URL}/game-state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phase }),
-  });
-  loadCurrentPhase();
+    });
+    loadCurrentPhase();
   }
 
   document.getElementById('phase-locked-btn').onclick = () => setPhase('locked');
   document.getElementById('phase-alert-btn').onclick = () => setPhase('alert');
   document.getElementById('phase-playing-btn').onclick = () => setPhase('playing');
 
-  loadCurrentPhase();
+  // ---------- WebSocket : affiche le résultat dès qu'une équipe trouve la bonne réponse ----------
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.event === 'bonus_won') {
+      document.getElementById('winner-card').style.display = 'block';
+      document.getElementById('winner-text').textContent =
+        `${message.team_name} a gagné ! (+10 points, total : ${message.team_points})`;
+      document.getElementById('status').textContent = '';
+      document.getElementById('prompt-input').value = '';
+      document.getElementById('answer-input').value = '';
+      document.getElementById('photo-preview').style.display = 'none';
+      uploadedImageUrl = null;
+    }
+  };
 
-  loadTeams();
+  loadCurrentPhase();
 </script>
 </body>
 </html>
