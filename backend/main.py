@@ -67,8 +67,16 @@ STATION_CLUE_PLAN = [
 import os as os_module
 DATA_DIR = "/data" if os_module.path.exists("/data") else "."
 DATABASE_URL = f"sqlite:///{DATA_DIR}/rallye.db"
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=True, connect_args={"timeout": 15})
 
+from sqlalchemy import event
+
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=15000")
+    cursor.close()
 
 def generate_access_code():
     return secrets.token_hex(3).upper()  # ex: "A3F9D1"
