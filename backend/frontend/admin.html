@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="theme.css">
+<title>Régie — Café Shot & Co Awards</title>
+<style>
+  * { box-sizing: border-box; }
+  body { max-width: 480px; margin: 0 auto; padding: 16px; }
+  h1 { text-align: center; font-size: 20px; color: var(--primary-dark); }
+  .card {
+    background: var(--card-bg); border-radius: 20px; padding: 20px;
+    margin-bottom: 16px; box-shadow: 0 6px 20px rgba(233,30,140,0.1);
+  }
+  h2 { font-size: 15px; color: var(--purple); margin-top: 0; }
+  input[type=text] {
+    width: 100%; padding: 12px; border-radius: 12px; border: 1.5px solid var(--secondary);
+    font-size: 15px; margin-bottom: 10px;
+  }
+  input[type=file] { margin-bottom: 10px; }
+  button {
+    background: linear-gradient(90deg, var(--primary), var(--purple));
+    color: white; border: none; border-radius: 999px;
+    padding: 12px 18px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  button.danger { background: linear-gradient(90deg, #D4232C, #8B1418); }
+  button:disabled { opacity: 0.5; }
+  .preview-img { width: 100%; border-radius: 10px; margin-bottom: 10px; display: none; }
+  .buzz-row {
+    display: flex; justify-content: space-between; background: white;
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; font-size: 14px;
+  }
+  .team-pick {
+    display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 10px;
+    background: white; margin-bottom: 6px; cursor: pointer; border: 2px solid transparent;
+  }
+  .team-pick.selected { border-color: var(--primary); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  #status { text-align: center; font-size: 13px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <h1>🎛️ Régie du jeu</h1>
+
+  <div class="card">
+    <h2>🎬 Contrôle du plateau</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">Phase actuelle : <strong id="current-phase-label">...</strong></p>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+        <button id="phase-locked-btn" style="background:linear-gradient(90deg,#7C6A8E,#4A3F5C);">🔒 Verrouillé</button>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+        <button id="phase-alert-btn" style="background:linear-gradient(90deg,#D4232C,#8B1418);">🚨 Alerte</button>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button id="phase-playing-btn" style="background:linear-gradient(90deg,#00BFA5,#7C4DFF);">▶️ Lancer le jeu</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Lancer une question bonus</h2>
+    <input type="text" id="prompt-input" placeholder="Ex: Qui est-ce ?">
+    <img id="photo-preview" class="preview-img">
+    <input type="file" id="photo-input" accept="image/*">
+    <button id="launch-btn">🚀 Lancer sur tous les écrans</button>
+    <p id="status"></p>
+  </div>
+
+  <div class="card" id="buzz-card" style="display:none;">
+    <h2>Ordre des buzz</h2>
+    <div id="buzz-list"></div>
+    <h2 style="margin-top:16px;">Qui a la bonne réponse ?</h2>
+    <div id="team-picker"></div>
+    <button id="resolve-btn" class="danger" disabled>Valider et pénaliser les 2 autres</button>
+  </div>
+
+<script>
+  const API_URL = window.location.origin + '/api';
+  let currentBonusId = null;
+  let selectedWinner = null;
+  let uploadedImageUrl = null;
+  let teamsCache = [];
+
+  async function loadTeams() {
+    const res = await fetch(`${API_URL}/teams`);
+    teamsCache = await res.json();
+  }
+
+  document.getElementById('photo-input').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('status').textContent = 'Envoi de la photo...';
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_URL}/upload`, { method: 'POST', body: formData });
+    const data = await res.json();
+    uploadedImageUrl = window.location.origin + data.url;
+    const preview = document.getElementById('photo-preview');
+    preview.src = uploadedImageUrl;
+    preview.style.display = 'block';
+    document.getElementById('status').textContent = 'Photo prête ✅';
+  };
+
+  document.getElementById('launch-btn').onclick = async () => {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) {
+      document.getElementById('status').textContent = 'Écris une question avant de lancer !';
+      return;
+    }
+    const res = await fetch(`${API_URL}/bonus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, image_url: uploadedImageUrl }),
+    });
+    const data = await res.json();
+    currentBonusId = data.id;
+    selectedWinner = null;
+    document.getElementById('status').textContent = 'Question lancée sur tous les écrans !';
+    document.getElementById('buzz-card').style.display = 'block';
+    renderTeamPicker();
+    pollBuzzes();
+  };
+
+  function renderTeamPicker() {
+    const container = document.getElementById('team-picker');
+    container.innerHTML = teamsCache.map(t => `
+      <div class="team-pick" data-id="${t.id}">
+        <div class="dot" style="background:${t.color}"></div>
+        ${t.name}
+      </div>
+    `).join('');
+    container.querySelectorAll('.team-pick').forEach(el => {
+      el.onclick = () => {
+        selectedWinner = el.dataset.id;
+        container.querySelectorAll('.team-pick').forEach(e => e.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('resolve-btn').disabled = false;
+      };
+    });
+  }
+
+  async function pollBuzzes() {
+    if (!currentBonusId) return;
+    const res = await fetch(`${API_URL}/bonus/${currentBonusId}/buzzes`);
+    const buzzes = await res.json();
+    document.getElementById('buzz-list').innerHTML = buzzes.length === 0
+      ? '<p style="font-size:13px; color:var(--text-muted);">Personne n\'a encore buzzé.</p>'
+      : buzzes.map(b => `<div class="buzz-row"><span>${b.rank}. ${b.team_name}</span></div>`).join('');
+  }
+
+  document.getElementById('resolve-btn').onclick = async () => {
+    if (!currentBonusId || !selectedWinner) return;
+    await fetch(`${API_URL}/bonus/${currentBonusId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner_team_id: selectedWinner }),
+    });
+    document.getElementById('status').textContent = 'Résolu ! Les 2 autres équipes perdent un indice.';
+    document.getElementById('buzz-card').style.display = 'none';
+    document.getElementById('prompt-input').value = '';
+    document.getElementById('photo-preview').style.display = 'none';
+    uploadedImageUrl = null;
+    currentBonusId = null;
+  };
+
+  // Rafraîchit l'ordre des buzz toutes les 2 secondes pendant qu'une question est active
+  setInterval(() => { if (currentBonusId) pollBuzzes(); }, 2000);
+
+  async function loadCurrentPhase() {
+  const res = await fetch(`${API_URL}/game-state`);
+  const data = await res.json();
+  document.getElementById('current-phase-label').textContent =
+    data.phase === 'locked' ? 'Verrouillé 🔒' :
+    data.phase === 'alert' ? 'Alerte 🚨' : 'Jeu en cours ▶️';
+  }
+
+  async function setPhase(phase) {
+  await fetch(`${API_URL}/game-state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase }),
+  });
+  loadCurrentPhase();
+  }
+
+  document.getElementById('phase-locked-btn').onclick = () => setPhase('locked');
+  document.getElementById('phase-alert-btn').onclick = () => setPhase('alert');
+  document.getElementById('phase-playing-btn').onclick = () => setPhase('playing');
+
+  loadCurrentPhase();
+
+  loadTeams();
+</script>
+</body>
+</html>

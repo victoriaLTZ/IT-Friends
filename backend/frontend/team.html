@@ -167,6 +167,7 @@ function renderBonusSlot() {
     slot.innerHTML = `
       <div class="bonus-banner">
         <h3>⚡ Question spéciale !</h3>
+        ${bonusActive.image_url ? `<img src="${bonusActive.image_url}" style="width:100%; border-radius:10px; margin-bottom:10px;">` : ''}
         <p style="margin-bottom:12px;">${bonusActive.prompt}</p>
         <button id="buzz-btn">BUZZ !</button>
         <p id="buzz-feedback" style="font-size:13px; margin-top:8px;"></p>
@@ -221,7 +222,7 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.event === 'bonus_started') {
-      bonusActive = { active: true, bonus_id: message.bonus_id, prompt: message.prompt };
+      bonusActive = { active: true, bonus_id: message.bonus_id, prompt: message.prompt, image_url: message.image_url };
       renderBonusSlot();
     }
     if (message.event === 'bonus_ended') {

@@ -168,6 +168,7 @@ class SuspectAssign(SQLModel):
 class BonusQuestion(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     prompt: str
+    image_url: Optional[str] = None
     active: bool = True
 
 
@@ -207,6 +208,7 @@ class ClueCreate(SQLModel):
 
 class BonusCreate(SQLModel):
     prompt: str
+    image_url: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -893,7 +895,7 @@ async def end_trial():
 # ---------------------------------------------------------------------------
 @app.post("/api/bonus", response_model=BonusQuestion)
 async def start_bonus(data: BonusCreate):
-    bonus = BonusQuestion(prompt=data.prompt, active=True)
+    bonus = BonusQuestion(prompt=data.prompt, image_url=data.image_url, active=True)
     with Session(engine) as session:
         session.add(bonus)
         session.commit()
@@ -903,6 +905,7 @@ async def start_bonus(data: BonusCreate):
         "event": "bonus_started",
         "bonus_id": bonus.id,
         "prompt": bonus.prompt,
+        "image_url": bonus.image_url,
     })
     return bonus
 
@@ -952,7 +955,18 @@ async def end_bonus(bonus_id: str):
     await manager.broadcast({"event": "bonus_ended", "bonus_id": bonus_id})
     return {"ended": True}
 
-
+@app.get("/api/bonus/{bonus_id}/buzzes")
+def get_bonus_buzzes(bonus_id: str):
+    with Session(engine) as session:
+        buzzes = session.exec(
+            select(Buzz).where(Buzz.bonus_id == bonus_id).order_by(Buzz.timestamp)
+        ).all()
+        result = []
+        for i, b in enumerate(buzzes):
+            team = session.get(Team, b.team_id)
+            result.append({"rank": i + 1, "team_id": b.team_id, "team_name": team.name if team else "?"})
+        return result
+    
 # ---------------------------------------------------------------------------
 # WebSocket
 # ---------------------------------------------------------------------------
