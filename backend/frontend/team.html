@@ -42,6 +42,25 @@
   .logout-link { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 16px; cursor: pointer; text-decoration: underline; }
   .bonus-banner { background: var(--primary); color: white; border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: center; }
   .bonus-banner h3 { color: white; }
+
+  .clue-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+  }
+  .clue-modal {
+    position: relative; background: var(--card-bg); border-radius: 20px; padding: 24px 20px;
+    max-width: 380px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  .clue-modal h3 { color: var(--primary-dark); margin-top: 0; }
+  .clue-modal-close {
+    position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--surface-2, #f0e6d2); border: none; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .clue-modal .target-name { font-weight: 700; color: var(--purple); margin-bottom: 4px; }
+</style>
+
+  
 </style>
 </head>
 <body>
@@ -146,8 +165,8 @@ async function renderDashboard() {
     <h3>Énigme en cours</h3>
     ${riddleHtml}
 
-    <h3>Indices récoltés (${clues.length})</h3>
-    <div id="clues-list">${cluesHtml}</div>
+    <h3 id="clues-toggle" style="cursor:pointer; user-select:none;">Indices récoltés (${clues.length}) <span id="clues-arrow">▸</span></h3>
+    <div id="clues-list" style="display:none;">${cluesHtml}</div>
 
     <p class="logout-link" id="logout-link">Se déconnecter</p>
   `;
@@ -156,6 +175,14 @@ async function renderDashboard() {
     document.getElementById('submit-code-btn').onclick = onSubmitCode;
   }
   document.getElementById('logout-link').onclick = logout;
+
+  document.getElementById('clues-toggle').onclick = () => {
+    const list = document.getElementById('clues-list');
+    const arrow = document.getElementById('clues-arrow');
+    const isHidden = list.style.display === 'none';
+    list.style.display = isHidden ? 'block' : 'none';
+    arrow.textContent = isHidden ? '▾' : '▸';
+  };
 
   renderBonusSlot();
 }
@@ -180,6 +207,22 @@ function renderBonusSlot() {
   }
 }
 
+function showClueModal(clue) {
+  const overlay = document.createElement('div');
+  overlay.className = 'clue-modal-overlay';
+  overlay.innerHTML = `
+    <div class="clue-modal">
+      <button class="clue-modal-close" id="clue-modal-close">✕</button>
+      <h3>🔍 Nouvel indice !</h3>
+      ${clue.image_url ? `<img src="${clue.image_url}" style="width:100%; border-radius:10px; margin-bottom:10px;">` : ''}
+      <p class="target-name">${clue.target_player}</p>
+      <p style="font-size:14px;">${clue.text}</p>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('clue-modal-close').onclick = () => overlay.remove();
+}
+
 async function onSubmitCode() {
   const input = document.getElementById('team-code-input');
   const feedback = document.getElementById('code-feedback');
@@ -195,7 +238,10 @@ async function onSubmitCode() {
 
   if (data.correct) {
     feedback.innerHTML = `<span style="color:#2F6B3A;">✅ Bravo, vous avancez !</span>`;
-    setTimeout(renderDashboard, 1200);
+    await renderDashboard();
+    if (data.clue) {
+      showClueModal(data.clue);
+    }
   } else {
     feedback.innerHTML = `<span style="color:#9C2E2E;">❌ Code incorrect</span>`;
     input.value = '';

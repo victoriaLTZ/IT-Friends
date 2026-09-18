@@ -657,6 +657,15 @@ async def set_game_state(data: PhaseUpdate):
     await manager.broadcast({"event": "phase_changed", "phase": data.phase})
     return {"phase": data.phase}
 
+@app.post("/api/game-state/reset-rally")
+def reset_rally():
+    with Session(engine) as session:
+        state = get_or_create_game_state(session)
+        state.rally_finished = False
+        session.add(state)
+        session.commit()
+        return {"reset": True}
+    
 # ---------------------------------------------------------------------------
 # Étapes du rallye
 # ---------------------------------------------------------------------------
@@ -828,7 +837,7 @@ async def submit_code(team_id: str, data: CodeSubmit):
         clue_data = None
         if clue:
             target = session.get(Player, clue.target_player_id)
-            clue_data = {"target_player": target.name, "text": clue.text, "kind": clue.kind}
+            clue_data = {"target_player": target.name, "text": clue.text, "kind": clue.kind, "image_url": clue.image_url}
 
         await manager.broadcast({
             "event": "team_advanced",
