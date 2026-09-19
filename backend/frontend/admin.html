@@ -176,5 +176,13 @@
       document.getElementById('winner-text').textContent =
         `${message.team_name} a gagné ! (+10 points, total : ${message.team_points})`;
       document.getElementById('status').textContent = '';
+      document.getElementById('prompt-input').value = '';
+      document.getElementById('photo-preview').style.display = 'none';
+      uploadedImageUrl = null;
     }
-  }
+  };
+
+  loadCurrentPhase();
+</script>
+</body>
+</html>

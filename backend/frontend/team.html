@@ -75,6 +75,7 @@ const API_URL = window.location.origin + '/api';
 
 let session = JSON.parse(localStorage.getItem('team_session') || 'null');
 let bonusActive = null;
+let bonusMySubmission = null;
 
 function renderLogin() {
   const card = document.getElementById('card');
