@@ -6,6 +6,13 @@
 <link rel="stylesheet" href="theme.css">
 <title>Régie — Café Shot & Co Awards</title>
 <style>
+  .answer-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: white; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px;
+  }
+  .answer-row button {
+    width: auto; padding: 8px 14px; font-size: 13px; margin-left: 10px; flex-shrink: 0;
+  }
   * { box-sizing: border-box; }
   body { max-width: 480px; margin: 0 auto; padding: 16px; }
   h1 { text-align: center; font-size: 20px; color: var(--primary-dark); }
@@ -51,9 +58,13 @@
     <input type="text" id="prompt-input" placeholder="Ex: Qui est-ce ?">
     <img id="photo-preview" class="preview-img">
     <input type="file" id="photo-input" accept="image/*">
-    <input type="text" id="answer-input" placeholder="La bonne réponse (exacte)">
     <button id="launch-btn">🚀 Lancer sur tous les écrans</button>
     <p id="status"></p>
+  </div>
+
+  <div class="card" id="answers-card" style="display:none;">
+    <h2>Réponses reçues</h2>
+    <div id="answers-list"></div>
   </div>
 
   <div class="card" id="winner-card" style="display:none;">
@@ -64,6 +75,8 @@
 <script>
   const API_URL = window.location.origin + '/api';
   let uploadedImageUrl = null;
+  let currentBonusId = null;
+  let pollInterval = null;
 
   document.getElementById('photo-input').onchange = async (e) => {
     const file = e.target.files[0];
@@ -82,19 +95,51 @@
 
   document.getElementById('launch-btn').onclick = async () => {
     const prompt = document.getElementById('prompt-input').value.trim();
-    const correctAnswer = document.getElementById('answer-input').value.trim();
-    if (!prompt || !correctAnswer) {
-      document.getElementById('status').textContent = 'Renseigne la question ET la bonne réponse !';
+    if (!prompt) {
+      document.getElementById('status').textContent = 'Écris une question avant de lancer !';
       return;
     }
-    await fetch(`${API_URL}/bonus`, {
+    const res = await fetch(`${API_URL}/bonus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, image_url: uploadedImageUrl, correct_answer: correctAnswer }),
+      body: JSON.stringify({ prompt, image_url: uploadedImageUrl }),
     });
-    document.getElementById('status').textContent = "Question lancée, en attente d'une bonne réponse...";
+    const data = await res.json();
+    currentBonusId = data.id;
+
+    document.getElementById('status').textContent = 'Question lancée !';
     document.getElementById('winner-card').style.display = 'none';
+    document.getElementById('answers-card').style.display = 'block';
+
+    pollAnswers();
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(pollAnswers, 2000);
   };
+
+  async function pollAnswers() {
+    if (!currentBonusId) return;
+    const res = await fetch(`${API_URL}/bonus/${currentBonusId}/answers`);
+    const answers = await res.json();
+    document.getElementById('answers-list').innerHTML = answers.length === 0
+      ? '<p style="font-size:13px; color:var(--text-muted);">Aucune réponse pour l\'instant.</p>'
+      : answers.map(a => `
+          <div class="answer-row">
+            <div><strong>${a.team_name}</strong><br>${a.answer}</div>
+            <button class="pick-btn" data-team="${a.team_id}">Choisir</button>
+          </div>
+        `).join('');
+    document.querySelectorAll('.pick-btn').forEach(btn => {
+      btn.onclick = () => selectWinner(btn.dataset.team);
+    });
+  }
+
+  async function selectWinner(teamId) {
+    await fetch(`${API_URL}/bonus/${currentBonusId}/select-winner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_id: teamId }),
+    });
+  }
 
   async function loadCurrentPhase() {
     const res = await fetch(`${API_URL}/game-state`);
@@ -117,24 +162,19 @@
   document.getElementById('phase-alert-btn').onclick = () => setPhase('alert');
   document.getElementById('phase-playing-btn').onclick = () => setPhase('playing');
 
-  // ---------- WebSocket : affiche le résultat dès qu'une équipe trouve la bonne réponse ----------
+  // ---------- WebSocket : affiche le résultat dès qu'une équipe est choisie comme gagnante ----------
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.event === 'bonus_won') {
+      if (pollInterval) clearInterval(pollInterval);
+      currentBonusId = null;
+
+      document.getElementById('answers-card').style.display = 'none';
       document.getElementById('winner-card').style.display = 'block';
       document.getElementById('winner-text').textContent =
         `${message.team_name} a gagné ! (+10 points, total : ${message.team_points})`;
       document.getElementById('status').textContent = '';
-      document.getElementById('prompt-input').value = '';
-      document.getElementById('answer-input').value = '';
-      document.getElementById('photo-preview').style.display = 'none';
-      uploadedImageUrl = null;
     }
-  };
-
-  loadCurrentPhase();
-</script>
-</body>
-</html>
+  }

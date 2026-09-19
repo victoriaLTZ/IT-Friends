@@ -11,6 +11,13 @@ from fastapi import UploadFile, File
 from fastapi.staticfiles import StaticFiles
 import os
 import shutil
+import unicodedata
+
+def normalize_answer(s: str) -> str:
+    s = (s or "").strip().lower()
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+    s = ' '.join(s.split())
+    return s
 
 ROSTER = [
     "Horti", "Clem", "Laure", "Margaux", "Eugé",
@@ -45,15 +52,15 @@ CLUE_TEMPLATES = {
 }
 
 CLUE_IMAGE_MAP = {
-    'favorite_book': '/uploads/URL_LIVRE.jpg',
-    'favorite_quote': '/uploads/URL_CITATION.jpg',
-    'favorite_drink': '/uploads/URL_BOISSON.jpg',
-    'phobia': '/uploads/URL_CHIEN.jpg',
-    'hidden_talent': '/uploads/URL_CROCHETAGE.jpg',
-    'dream_trip': '/uploads/URL_BILLET.jpg',
-    'impulse_purchase': '/uploads/URL_MONTRE.jpg',
-    'looping_song': '/uploads/URL_VOITURE.jpg',
-    'old_style': '/uploads/URL_CAMERA.jpg',
+    'favorite_book': '/clue-images/favorite_book.jpg',
+    'favorite_quote': '/clue-images/favorite_quote.jpg',
+    'favorite_drink': '/clue-images/favorite_drink.jpg',
+    'phobia': '/clue-images/phobia.jpg',
+    'hidden_talent': '/clue-images/hidden_talent.jpg',
+    'dream_trip': '/clue-images/dream_trip.jpg',
+    'impulse_purchase': '/clue-images/impulse_purchase.jpg',
+    'looping_song': '/clue-images/looping_song.jpg',
+    'old_style': '/clue-images/old_style.jpg',
 }
 
 STATION_CLUE_PLAN = [
@@ -231,6 +238,15 @@ class TeamStationOrder(SQLModel, table=True):
     stage_id: str = Field(foreign_key="stage.id")
     position: int
 
+class BonusAnswerSubmission(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bonus_id: str = Field(foreign_key="bonusquestion.id")
+    team_id: str = Field(foreign_key="team.id")
+    answer: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class WinnerSelect(SQLModel):
+    team_id: str
 class Clue(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     stage_id: str = Field(foreign_key="stage.id")
@@ -976,8 +992,8 @@ async def submit_bonus_answer(bonus_id: str, data: AnswerAttempt):
         if not bonus or not bonus.active:
             return {"correct": False, "already_resolved": True}
 
-        given = data.answer.strip().lower()
-        expected = (bonus.correct_answer or "").strip().lower()
+        given = normalize_answer(data.answer)
+        expected = normalize_answer(bonus.correct_answer)
         if not expected or given != expected:
             return {"correct": False}
 
@@ -1003,6 +1019,14 @@ async def submit_bonus_answer(bonus_id: str, data: AnswerAttempt):
     })
     return {"correct": True, "team_points": team.team_points}
 
+@app.get("/api/bonus/active")
+def get_active_bonus():
+    with Session(engine) as session:
+        bonus = session.exec(select(BonusQuestion).where(BonusQuestion.active == True)).first()
+        if not bonus:
+            return {"active": False}
+        return {"active": True, "bonus_id": bonus.id, "prompt": bonus.prompt, "image_url": bonus.image_url}
+    
 # ---------------------------------------------------------------------------
 # Endpoints du procès ------ 
 # ---------------------------------------------------------------------------
@@ -1138,6 +1162,68 @@ async def start_bonus(data: BonusCreate):
     })
     return bonus
 
+@app.post("/api/bonus/{bonus_id}/submit-answer")
+async def submit_open_answer(bonus_id: str, data: AnswerAttempt):
+    with Session(engine) as session:
+        bonus = session.get(BonusQuestion, bonus_id)
+        if not bonus or not bonus.active:
+            return {"submitted": False, "already_resolved": True}
+
+        existing = session.exec(
+            select(BonusAnswerSubmission).where(
+                BonusAnswerSubmission.bonus_id == bonus_id,
+                BonusAnswerSubmission.team_id == data.team_id,
+            )
+        ).first()
+        if existing:
+            existing.answer = data.answer
+            existing.timestamp = datetime.utcnow()
+            session.add(existing)
+        else:
+            session.add(BonusAnswerSubmission(bonus_id=bonus_id, team_id=data.team_id, answer=data.answer))
+        session.commit()
+    return {"submitted": True}
+
+
+@app.get("/api/bonus/{bonus_id}/answers")
+def get_bonus_answers(bonus_id: str):
+    with Session(engine) as session:
+        subs = session.exec(
+            select(BonusAnswerSubmission).where(BonusAnswerSubmission.bonus_id == bonus_id).order_by(BonusAnswerSubmission.timestamp)
+        ).all()
+        result = []
+        for s in subs:
+            team = session.get(Team, s.team_id)
+            result.append({"team_id": s.team_id, "team_name": team.name if team else "?", "answer": s.answer})
+        return result
+
+
+@app.post("/api/bonus/{bonus_id}/select-winner")
+async def select_bonus_winner(bonus_id: str, data: WinnerSelect):
+    with Session(engine) as session:
+        bonus = session.get(BonusQuestion, bonus_id)
+        if not bonus or not bonus.active:
+            raise HTTPException(status_code=400, detail="Question déjà résolue")
+        team = session.get(Team, data.team_id)
+        if not team:
+            raise HTTPException(status_code=404, detail="Équipe introuvable")
+
+        bonus.active = False
+        bonus.winner_team_id = team.id
+        session.add(bonus)
+        team.team_points += 10
+        session.add(team)
+        session.commit()
+        session.refresh(team)
+
+    await manager.broadcast({
+        "event": "bonus_won",
+        "bonus_id": bonus_id,
+        "team_id": team.id,
+        "team_name": team.name,
+        "team_points": team.team_points,
+    })
+    return {"resolved": True, "team_points": team.team_points}
 
 @app.post("/api/bonus/{bonus_id}/end")
 async def end_bonus(bonus_id: str):

@@ -243,7 +243,7 @@
 
       g.innerHTML = `
         ${avatarsHtml}
-        <text y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#B3126A">${team.name}</text>
+        <text y="34" text-anchor="middle" font-size="12" font-weight="700" fill="${team.color || '#B3126A'}">${team.name}</text>
       `;
 
       g.style.transform = `translate(${tx}px, ${ty}px)`;

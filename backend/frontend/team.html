@@ -122,16 +122,20 @@ async function renderDashboard() {
   const card = document.getElementById('card');
   card.innerHTML = `<h2>Chargement...</h2>`;
 
-  const [stationRes, cluesRes, teamsRes] = await Promise.all([
+  const [stationRes, cluesRes, teamsRes, bonusRes] = await Promise.all([
     fetch(`${API_URL}/teams/${session.teamId}/current-station`),
     fetch(`${API_URL}/teams/${session.teamId}/clues`),
     fetch(`${API_URL}/teams`),
+    fetch(`${API_URL}/bonus/active`),
   ]);
 
   const station = await stationRes.json();
   const clues = await cluesRes.json();
   const teams = await teamsRes.json();
   const myTeam = teams.find(t => t.id === session.teamId);
+
+  const bonusStatus = await bonusRes.json();
+  bonusActive = bonusStatus.active ? { active: true, bonus_id: bonusStatus.bonus_id, prompt: bonusStatus.prompt, image_url: bonusStatus.image_url } : null;
 
   let riddleHtml = '';
   if (station.finished) {
@@ -191,17 +195,31 @@ function renderBonusSlot() {
   const slot = document.getElementById('bonus-slot');
   if (!slot) return;
   if (bonusActive && bonusActive.active) {
+    const alreadySubmitted = bonusMySubmission && bonusMySubmission.bonus_id === bonusActive.bonus_id;
     slot.innerHTML = `
       <div class="bonus-banner">
         <h3>⚡ Question spéciale !</h3>
         ${bonusActive.image_url ? `<img src="${bonusActive.image_url}" style="width:100%; border-radius:10px; margin-bottom:10px;">` : ''}
         <p style="margin-bottom:12px;">${bonusActive.prompt}</p>
-        <input type="text" id="bonus-answer-input" placeholder="Votre réponse" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:8px;">
-        <button id="bonus-submit-btn" style="background:white; color:var(--primary);">Valider</button>
+        ${alreadySubmitted ? `
+          <p style="font-size:14px;">✅ Réponse envoyée : « ${bonusMySubmission.answer} »</p>
+          <p style="font-size:12px; opacity:0.85;">En attente de la décision de l'organisateur...</p>
+          <button id="edit-answer-btn" style="background:white; color:var(--primary); margin-top:8px;">Modifier ma réponse</button>
+        ` : `
+          <input type="text" id="bonus-answer-input" placeholder="Votre réponse" value="${bonusMySubmission?.answer || ''}" style="width:100%; padding:10px; border-radius:10px; border:none; margin-bottom:8px;">
+          <button id="bonus-submit-btn" style="background:white; color:var(--primary);">Envoyer</button>
+        `}
         <p id="buzz-feedback" style="font-size:13px; margin-top:8px;"></p>
       </div>
     `;
-    document.getElementById('bonus-submit-btn').onclick = onBonusAnswer;
+    if (alreadySubmitted) {
+      document.getElementById('edit-answer-btn').onclick = () => {
+        bonusMySubmission = null;
+        renderBonusSlot();
+      };
+    } else {
+      document.getElementById('bonus-submit-btn').onclick = onBonusAnswer;
+    }
   } else {
     slot.innerHTML = '';
   }
@@ -254,20 +272,18 @@ async function onBonusAnswer() {
   const answer = input.value.trim();
   if (!answer) return;
 
-  const res = await fetch(`${API_URL}/bonus/${bonusActive.bonus_id}/answer`, {
+  const res = await fetch(`${API_URL}/bonus/${bonusActive.bonus_id}/submit-answer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ team_id: session.teamId, answer }),
   });
   const data = await res.json();
 
-  if (data.correct) {
-    feedback.innerHTML = `<span style="color:#C8F5D0;">✅ Bonne réponse !</span>`;
-  } else if (data.already_resolved) {
-    feedback.innerHTML = `Une autre équipe a déjà trouvé.`;
+  if (data.submitted) {
+    bonusMySubmission = { bonus_id: bonusActive.bonus_id, answer };
+    renderBonusSlot();
   } else {
-    feedback.innerHTML = `❌ Pas la bonne réponse, réessayez !`;
-    input.value = '';
+    feedback.innerHTML = `La question vient d'être résolue.`;
   }
 }
 
@@ -278,6 +294,7 @@ function connectWebSocket() {
     const message = JSON.parse(event.data);
     if (message.event === 'bonus_started') {
       bonusActive = { active: true, bonus_id: message.bonus_id, prompt: message.prompt, image_url: message.image_url };
+      bonusMySubmission = null;
       renderBonusSlot();
     }
     if (message.event === 'bonus_won') {
